@@ -1,11 +1,19 @@
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
 #include "internal.h"
 
 #include <ctype.h>
-#include <float.h>
+#include <errno.h>
+#include <locale.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(__APPLE__)
+#include <xlocale.h>
+#endif
 
 const char *mcfluke_version(void) { return "0.1.0"; }
 uint32_t mcfluke_abi_version(void) { return 1; }
@@ -92,41 +100,64 @@ mcfluke_status mcfluke_parse_identity(const char *response,
     return MCFLUKE_OK;
 }
 
-/* Parse the protocol's ASCII decimal syntax without changing process locale. */
-static int parse_decimal(const char *text, const char **end, double *value)
+/* Validate the wire grammar; numeric conversion belongs to the C runtime. */
+static const char *decimal_token_end(const char *text)
 {
     const char *p = text;
-    long double number = 0, fraction = 0.1L;
-    int negative = 0, digits = 0, exponent = 0, exponent_negative = 0;
-    if (*p == '+' || *p == '-') negative = *p++ == '-';
-    while (*p >= '0' && *p <= '9') {
-        number = number * 10 + (*p++ - '0');
-        ++digits;
-    }
+    const char *digits;
+    int has_digits;
+    if (*p == '+' || *p == '-') ++p;
+    if (*p == '0' && (p[1] == 'x' || p[1] == 'X')) return NULL;
+    digits = p;
+    p += strspn(p, "0123456789");
+    has_digits = p != digits;
     if (*p == '.') {
         ++p;
-        while (*p >= '0' && *p <= '9') {
-            number += (*p++ - '0') * fraction;
-            fraction *= 0.1L;
-            ++digits;
-        }
+        digits = p;
+        p += strspn(p, "0123456789");
+        has_digits = has_digits || p != digits;
     }
-    if (!digits) return 0;
+    if (!has_digits) return NULL;
     if (*p == 'e' || *p == 'E') {
         ++p;
-        if (*p == '+' || *p == '-') exponent_negative = *p++ == '-';
-        if (*p < '0' || *p > '9') return 0;
-        while (*p >= '0' && *p <= '9') {
-            if (exponent > 400) return 0;
-            exponent = exponent * 10 + (*p++ - '0');
-        }
-        if (exponent > 308) return 0;
-        while (exponent-- > 0) number = exponent_negative ? number / 10 : number * 10;
+        if (*p == '+' || *p == '-') ++p;
+        digits = p;
+        p += strspn(p, "0123456789");
+        if (p == digits) return NULL;
     }
-    if (!isfinite(number) || number > DBL_MAX) return 0;
-    *value = (double)(negative ? -number : number);
-    *end = p;
-    return 1;
+    return p;
+}
+
+static mcfluke_status convert_decimal(const char *text, const char *end,
+    double *value, mcfluke_error *error)
+{
+    char *converted_end;
+    double number;
+    int conversion_error;
+#if defined(_WIN32)
+    _locale_t locale = _create_locale(LC_NUMERIC, "C");
+#else
+    locale_t locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+#endif
+    if (!locale)
+        return mcfluke_fail(error, MCFLUKE_OUT_OF_MEMORY, errno, "Cannot allocate the C numeric locale.");
+    errno = 0;
+#if defined(_WIN32)
+    number = _strtod_l(text, &converted_end, locale);
+    conversion_error = errno;
+    _free_locale(locale);
+#else
+    number = strtod_l(text, &converted_end, locale);
+    conversion_error = errno;
+    freelocale(locale);
+#endif
+    if (converted_end != end || !isfinite(number) ||
+        (conversion_error == ERANGE && number == 0.0) ||
+        (conversion_error != 0 && conversion_error != ERANGE))
+        return mcfluke_fail(error, MCFLUKE_PROTOCOL_ERROR, conversion_error,
+            "Display number is invalid or outside the representable double range.");
+    *value = number;
+    return MCFLUKE_OK;
 }
 
 static int ascii_prefix_equal(const char *text, const char *prefix)
@@ -166,14 +197,17 @@ mcfluke_status mcfluke_parse_display(const char *response,
         result.state = MCFLUKE_READING_OUT_OF_RANGE;
         unit = text + 12;
         if (*unit == '.') ++unit;
-    } else if (parse_decimal(text, &end, &result.value) &&
-        (*end == '\0' || *end == ' ' || isalpha((unsigned char)*end) || *end == '%')) {
+    } else if (isdigit((unsigned char)*text) || *text == '.' ||
+        ((*text == '+' || *text == '-') && (isdigit((unsigned char)text[1]) || text[1] == '.'))) {
+        mcfluke_status status;
+        end = decimal_token_end(text);
+        if (!end || !(*end == '\0' || *end == ' ' || isalpha((unsigned char)*end) || *end == '%'))
+            return mcfluke_fail(error, MCFLUKE_PROTOCOL_ERROR, 0, "Malformed numeric display response.");
+        status = convert_decimal(text, end, &result.value, error);
+        if (status != MCFLUKE_OK) return status;
         result.state = MCFLUKE_READING_VALUE;
         unit = end;
     } else {
-        if (isdigit((unsigned char)*text) || *text == '.' ||
-            ((*text == '+' || *text == '-') && (isdigit((unsigned char)text[1]) || text[1] == '.')))
-            return mcfluke_fail(error, MCFLUKE_PROTOCOL_ERROR, 0, "Malformed numeric display response.");
         result.state = MCFLUKE_READING_TEXT;
         unit = text + strlen(text);
     }

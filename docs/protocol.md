@@ -67,9 +67,18 @@ not a guessed physical quantity. Do not treat range overload as a numeric zero:
 the C API's `state` differentiates numeric, out-of-range and other text states;
 bindings expose nullable values where appropriate.
 
-The parsers do not change the process's numeric locale. They reject malformed
-numeric data, non-ASCII framing contamination and oversized fields, and
-preserve unrecognized textual displays rather than fabricating a reading.
+Numbers are converted by the C runtime using an explicit C numeric locale:
+`_strtod_l` on Windows and `strtod_l` on POSIX. There is no handwritten
+decimal arithmetic and the process's numeric locale is not changed. The
+decimal wire grammar is validated separately; malformed numbers, overflow,
+underflow to zero, non-ASCII framing contamination and oversized fields are
+rejected. Finite representable subnormal values remain valid. Unrecognized
+textual displays are preserved rather than turned into fabricated readings.
+
+The C# exerciser prefixes readings with `HH:mm:ss` from the PC's local clock
+when the reading is printed, not from the Fluke. `QM` contains no timestamp.
+Numeric convenience values use concise formatting; the original `display`
+text retains the meter's exact digits and trailing zeros.
 
 This published command set does **not** provide a secondary-display query,
 complete LCD annunciators, timestamps from the meter, direct rotary-switch

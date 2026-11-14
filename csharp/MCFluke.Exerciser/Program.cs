@@ -239,10 +239,14 @@ internal static class ExerciserApp
         => Console.WriteLine($"Model: {identity.Model}; firmware: {identity.Firmware}; serial: {identity.SerialNumber}");
 
     private static void PrintReading(FlukeReading reading)
+        => Console.WriteLine(FormatReading(reading, DateTimeOffset.Now));
+
+    internal static string FormatReading(FlukeReading reading, DateTimeOffset timestamp)
     {
-        string value = reading.Value?.ToString("G17", CultureInfo.InvariantCulture) ?? "(no numeric value)";
-        Console.WriteLine($"{DateTimeOffset.Now:O} display=\"{reading.Display}\" unit=\"{reading.Unit}\" " +
-            $"state={reading.State} value={value} (displayed units; no scaling)");
+        string value = reading.Value?.ToString("G", CultureInfo.InvariantCulture) ?? "(no numeric value)";
+        string time = timestamp.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        return $"{time} display=\"{reading.Display}\" unit=\"{reading.Unit}\" " +
+            $"state={reading.State} value={value} (displayed units; no scaling)";
     }
 
     private static void PrintVersion()
@@ -313,6 +317,7 @@ internal static class ExerciserApp
         enters a calibration workflow. SF23 logging / SF30 save are 189-only and report
         Unsupported on the 187. No operation resets calibration constants.
         Numeric values and units match the display exactly; no SI conversion.
+        Reading timestamps use the PC's local clock (HH:mm:ss), not the meter's clock.
         Ctrl+C exits (130); EOF exits without sending the pending command.
         Exit codes: 0 success, 1 operation/test/native-load failure, 2 invalid CLI input.
         """);

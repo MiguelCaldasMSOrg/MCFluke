@@ -1,5 +1,6 @@
 #include "mcfluke.h"
 #include "fake_transport.h"
+#include <locale.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -194,9 +195,60 @@ static void protocol(void)
     CHECK(mcfluke_parse_display("QM,+1 V", &reading, NULL) == MCFLUKE_OK);
 }
 
+static void decimal_conversion(void)
+{
+    const char *numbers[] = {
+        "1.656", "1.676", "1.632", "1.425", "1.423", "0.1", "1.005",
+        "+01.440", "-1.656", "-0", "1.25e-3", "1.7976931348623157e308",
+        "2.2250738585072014e-308", "4.9406564584124654e-324",
+        "1.00000000000000011102230246251565404236316680908203125",
+        "1.00000000000000011102230246251565404236316680908203126"
+    };
+    const char *comma_locales[] = {
+        "de_DE.UTF-8", "fr_FR.UTF-8", "pt_PT.UTF-8", "de-DE",
+        "German_Germany.1252", "Portuguese_Portugal.1252"
+    };
+    const char *original = setlocale(LC_NUMERIC, NULL);
+    char saved_locale[256], selected_locale[256], response[160];
+    mcfluke_reading reading;
+    mcfluke_error error;
+    size_t i;
+    int found_comma_locale = 0;
+    CHECK(original != NULL && strlen(original) < sizeof(saved_locale));
+    if (!original || strlen(original) >= sizeof(saved_locale)) return;
+    (void)snprintf(saved_locale, sizeof(saved_locale), "%s", original);
+    CHECK(setlocale(LC_NUMERIC, "C") != NULL);
+    for (i = 0; i < sizeof(numbers) / sizeof(numbers[0]); ++i) {
+        double expected = strtod(numbers[i], NULL);
+        (void)snprintf(response, sizeof(response), "QM,%s mV AC", numbers[i]);
+        CHECK(mcfluke_parse_display(response, &reading, &error) == MCFLUKE_OK);
+        CHECK(reading.value == expected);
+        CHECK(!!signbit(reading.value) == !!signbit(expected));
+        CHECK(strcmp(reading.display, response + 3) == 0);
+    }
+    CHECK(mcfluke_parse_display("QM,+0x1p2 V", &reading, &error) == MCFLUKE_PROTOCOL_ERROR);
+    CHECK(mcfluke_parse_display("QM,+1e+ V", &reading, &error) == MCFLUKE_PROTOCOL_ERROR);
+    CHECK(mcfluke_parse_display("QM,+1,656 V", &reading, &error) == MCFLUKE_PROTOCOL_ERROR);
+    for (i = 0; i < sizeof(comma_locales) / sizeof(comma_locales[0]); ++i) {
+        const char *selected = setlocale(LC_NUMERIC, comma_locales[i]);
+        if (!selected) continue;
+        (void)snprintf(selected_locale, sizeof(selected_locale), "%s", selected);
+        CHECK(strcmp(localeconv()->decimal_point, ",") == 0);
+        CHECK(mcfluke_parse_display("QM,+1.656 mV AC", &reading, &error) == MCFLUKE_OK);
+        CHECK(reading.value == 1.656);
+        CHECK(strcmp(setlocale(LC_NUMERIC, NULL), selected_locale) == 0);
+        found_comma_locale = 1;
+        break;
+    }
+    if (!found_comma_locale)
+        puts("SKIP comma-decimal locale check: no requested locale is installed.");
+    CHECK(setlocale(LC_NUMERIC, saved_locale) != NULL);
+}
+
 int main(void)
 {
     parsers();
+    decimal_conversion();
     protocol();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;

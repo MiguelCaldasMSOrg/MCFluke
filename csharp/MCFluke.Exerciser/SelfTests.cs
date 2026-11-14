@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using MCFluke;
@@ -28,6 +29,7 @@ internal static class SelfTests
         Console.WriteLine("Offline self-tests: ONLY sim://187 is ever opened. No real serial port is used.");
         Run("ABI 1 native sizes, offsets and int32 enums", TestLayouts);
         Run("CLI parsing and simulator isolation", TestOptions);
+        Run("short PC-clock timestamps and concise invariant numeric output", TestReadingFormat);
         Run("managed argument guards (no native calls)", TestManagedGuards);
         Run("typed exception mappings preserve structured details", TestExceptionMappings);
         Run("mismatched and unknown structured statuses are protocol errors", TestMalformedErrors);
@@ -83,6 +85,16 @@ internal static class SelfTests
                 Equal(fixture.Unit, reading.Unit);
             });
         }
+
+        Run("C runtime conversion matches nearest-double parsing exactly", () =>
+        {
+            foreach (string number in new[] { "1.656", "1.676", "1.632", "1.425", "1.423", "0.1", "1.005" })
+            {
+                FlukeReading reading = FlukeProtocol.ParseDisplay($"QM,+{number} mV AC");
+                Equal<double?>(double.Parse(number, CultureInfo.InvariantCulture), reading.Value);
+                Equal($"+{number} mV AC", reading.Display);
+            }
+        });
 
         foreach (string display in new[] { "Out of Range", "out of range", "OUT OF RANGE" })
         {
@@ -271,6 +283,37 @@ internal static class SelfTests
         foreach (string[] arguments in invalid)
         {
             Throws<ArgumentException>(() => ExerciserApp.Options.Parse(arguments));
+        }
+    }
+
+    private static void TestReadingFormat()
+    {
+        var timestamp = new DateTimeOffset(2026, 11, 14, 17, 25, 51, TimeSpan.FromHours(2));
+        CultureInfo original = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-FR");
+            foreach (string number in new[] { "1.656", "1.676", "1.632", "0.0001234" })
+            {
+                var reading = new FlukeReading(double.Parse(number, CultureInfo.InvariantCulture),
+                    FlukeReadingState.Value, $"+0{number} mV AC", "mV AC");
+                Equal($"17:25:51 display=\"{reading.Display}\" unit=\"mV AC\" " +
+                    $"state=Value value={number} (displayed units; no scaling)",
+                    ExerciserApp.FormatReading(reading, timestamp));
+            }
+            Equal("17:25:51 display=\"+01.440 mV AC\" unit=\"mV AC\" " +
+                "state=Value value=1.44 (displayed units; no scaling)",
+                ExerciserApp.FormatReading(
+                    new FlukeReading(1.44, FlukeReadingState.Value, "+01.440 mV AC", "mV AC"), timestamp));
+            Equal("17:25:51 display=\"Out of Range\" unit=\"\" " +
+                "state=OutOfRange value=(no numeric value) (displayed units; no scaling)",
+                ExerciserApp.FormatReading(
+                    new FlukeReading(null, FlukeReadingState.OutOfRange, "Out of Range", ""), timestamp));
+            Equal("fr-FR", CultureInfo.CurrentCulture.Name);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
         }
     }
 

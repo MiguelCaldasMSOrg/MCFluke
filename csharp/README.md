@@ -60,6 +60,11 @@ presses keys or invokes setup/reset/calibration. The default read cadence is
 two seconds; `--interval` accepts invariant-culture seconds. Reads run on
 scheduled start times; late reads are performed without a negative delay.
 
+Reading timestamps use the **PC's local clock**, formatted as `HH:mm:ss` when
+the reading is printed. They do not come from the Fluke. Numeric values use
+concise invariant formatting rather than forced 17-digit output; `Display`
+still preserves every character sent by the meter, including trailing zeros.
+
 Without `--count`, the interactive menu exposes **all** capabilities: identity,
 single/repeated display reads, every valid SF key, default setup, RI reset,
 timeout get/set, both parsers, version, ABI, and status messages. No control
