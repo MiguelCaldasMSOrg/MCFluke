@@ -1,6 +1,6 @@
 # MCFluke C# binding and exerciser
 
-Original, dependency-free .NET 10 code for the immutable ABI 1 contract in
+Original, dependency-free .NET 10 code for Windows and the immutable ABI 1 contract in
 `include\mcfluke.h`. No GPL/sigrok implementation is incorporated.
 
 ## Build and run
@@ -16,20 +16,23 @@ exactly `sim://187`; it rejects `--port`, `--count`, and `--interval` alongside
 
 The Visual Studio project reference builds the native DLL and copies it
 transitively beside the application. Discovery also supports matching
-`out\vs\bin\x64\Debug` / `Release` outputs and portable `build\bin` locations
-beneath ancestors. It does **not** rely on the working directory. Expected names:
-`mcfluke.dll` on Windows, `libmcfluke.so` on Linux, `libmcfluke.dylib` on macOS.
+`out\vs\bin\x64\Debug` / `Release` outputs beneath ancestors.
+Retired build directories are not searched. It does **not** rely on the working
+directory. The native library is `mcfluke.dll`; non-Windows loading is rejected.
 For publishing, running outside the repository, or choosing a specific build:
 
 ```powershell
-$env:MCFLUKE_LIBRARY = 'C:\Projects\MCFluke\build\bin\mcfluke.dll'
-dotnet run --project .\csharp\MCFluke.Exerciser -- --self-test
+$env:MCFLUKE_LIBRARY = 'C:\Projects\MCFluke\out\vs\bin\x64\Debug\mcfluke.dll'
+.\csharp\MCFluke.Exerciser\bin\Debug\net10.0-windows\MCFluke.Exerciser.exe --self-test
 ```
 
 The override must be an absolute **file** path; a broken override fails rather
 than silently loading another library. Native loading errors include diagnostics.
-There are no NuGet package dependencies. Both projects single-target `net10.0`
-with nullable analysis and warnings treated as errors.
+There are no NuGet package dependencies. Both projects single-target
+`net10.0-windows` with nullable analysis and warnings treated as errors.
+Consuming .NET projects must also target Windows. Build through the Visual
+Studio solution; the native dependency is mandatory, including for the binding
+library, rather than skipped by a managed-only build path.
 The managed assembly is named `MCFluke.Managed.dll` to avoid colliding with
 native `mcfluke.dll` on case-insensitive Windows filesystems.
 

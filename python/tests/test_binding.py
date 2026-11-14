@@ -215,28 +215,62 @@ class ABITests(unittest.TestCase):
                 loader.assert_called_once_with(str(Path(__file__).resolve()))
                 self.assertIs(_native.load(Path(__file__).resolve()), library)
 
-    def test_vs_outputs_precede_adjacent_and_legacy_libraries(self):
+    def test_vs_outputs_precede_adjacent_libraries(self):
         root = Path(__file__).resolve().parents[2]
         debug = root / "out" / "vs" / "bin" / "x64" / "Debug" / "mcfluke.dll"
         release = root / "out" / "vs" / "bin" / "x64" / "Release" / "mcfluke.dll"
         adjacent = Path(_native.__file__).resolve().parent / "mcfluke.dll"
-        legacy = root / "build" / "bin" / "mcfluke.dll"
-        existing = {debug, release, adjacent, legacy}
-        with patch.object(_native, "_names", return_value=("mcfluke.dll",)):
+        existing = {debug, release, adjacent}
+        with patch.object(_native.sys, "platform", "win32"):
             with patch.object(Path, "is_file", lambda candidate: candidate in existing):
                 candidates = _native._candidates()
-                found = [next(candidates) for _ in range(4)]
-        self.assertEqual(found, [str(debug), str(release), str(adjacent), str(legacy)])
+                found = [next(candidates) for _ in range(3)]
+        self.assertEqual(found, [str(debug), str(release), str(adjacent)])
 
-    def test_release_and_legacy_discovery_fallbacks(self):
+    def test_release_and_adjacent_discovery_fallbacks(self):
         root = Path(__file__).resolve().parents[2]
         release = root / "out" / "vs" / "bin" / "x64" / "Release" / "mcfluke.dll"
-        legacy = root / "build" / "bin" / "mcfluke.dll"
-        for existing, expected in (({release, legacy}, release), ({legacy}, legacy)):
+        adjacent = Path(_native.__file__).resolve().parent / "mcfluke.dll"
+        for existing, expected in (({release, adjacent}, release), ({adjacent}, adjacent)):
             with self.subTest(existing=existing):
-                with patch.object(_native, "_names", return_value=("mcfluke.dll",)):
+                with patch.object(_native.sys, "platform", "win32"):
                     with patch.object(Path, "is_file", lambda candidate: candidate in existing):
                         self.assertEqual(next(_native._candidates()), str(expected))
+
+    def test_non_windows_loading_is_rejected_without_search_or_native_calls(self):
+        for platform in ("linux", "darwin"):
+            with self.subTest(platform=platform):
+                for override in (None, Path(__file__).resolve()):
+                    with patch.object(_native.sys, "platform", platform):
+                        with patch.object(_native, "_candidates") as candidates:
+                            with patch.object(_native.C, "CDLL") as loader:
+                                with self.assertRaisesRegex(m.DllNotFoundError, "Windows"):
+                                    _native.load(override)
+                                loader.assert_not_called()
+                            candidates.assert_not_called()
+
+    def test_retired_build_directory_is_not_searched(self):
+        root = Path(__file__).resolve().parents[2]
+        retired = root / "build" / "bin" / "mcfluke.dll"
+        with patch.object(Path, "is_file", return_value=False) as is_file:
+            list(_native._candidates())
+            self.assertNotIn(unittest.mock.call(retired), is_file.call_args_list)
+
+    def test_windows_path_discovers_the_installed_dll(self):
+        installed = Path(__file__).resolve().parents[2] / "deployment" / "bin" / "mcfluke.dll"
+        with patch.object(_native.os, "get_exec_path", return_value=[str(installed.parent)]):
+            with patch.object(Path, "is_file", lambda candidate: candidate == installed):
+                self.assertEqual(next(_native._candidates()), str(installed))
+
+    def test_discovery_does_not_search_unix_style_python_prefix_directories(self):
+        with patch.object(_native.os, "get_exec_path", return_value=[]):
+            with patch.object(Path, "is_file", return_value=False) as is_file:
+                self.assertEqual(list(_native._candidates())[-1], "mcfluke.dll")
+                for directory in ("lib", "bin"):
+                    self.assertNotIn(
+                        unittest.mock.call(Path(sys.prefix) / directory / "mcfluke.dll"),
+                        is_file.call_args_list,
+                    )
 
     def test_environment_override_is_authoritative_without_search(self):
         override = str(Path(__file__).resolve())
@@ -260,15 +294,8 @@ class ABITests(unittest.TestCase):
                         _native.load(override)
                         loader.assert_called_once_with(override)
 
-    def test_platform_library_names_remain_portable(self):
-        for platform, expected in (
-            ("win32", ("mcfluke.dll",)),
-            ("darwin", ("libmcfluke.dylib",)),
-            ("linux", ("libmcfluke.so", "libmcfluke.so.1")),
-        ):
-            with self.subTest(platform=platform):
-                with patch.object(_native.sys, "platform", platform):
-                    self.assertEqual(_native._names(), expected)
+    def test_native_library_name_is_the_windows_dll(self):
+        self.assertEqual(_native.LIBRARY_NAME, "mcfluke.dll")
 
 
 class BindingTests(unittest.TestCase):

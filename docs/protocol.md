@@ -72,7 +72,7 @@ the C API's `state` differentiates numeric, out-of-range and other text states;
 bindings expose nullable values where appropriate.
 
 Numbers are converted by the C runtime using an explicit C numeric locale:
-`_strtod_l` on Windows and `strtod_l` on POSIX. There is no handwritten
+`_strtod_l` on Windows. There is no handwritten
 decimal arithmetic and the process's numeric locale is not changed. The
 decimal wire grammar is validated separately; malformed numbers, overflow,
 underflow to zero, non-ASCII framing contamination and oversized fields are

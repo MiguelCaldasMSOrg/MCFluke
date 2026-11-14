@@ -4,6 +4,8 @@
     <MCFlukeRoot>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))</MCFlukeRoot>
     <MCFlukeNativePlatform Condition="'$(MCFlukeNativePlatform)' == ''">x64</MCFlukeNativePlatform>
     <MCFlukeNativeBin>$([MSBuild]::NormalizeDirectory('$(MCFlukeRoot)', 'out', 'vs', 'bin', '$(MCFlukeNativePlatform)', '$(Configuration)'))</MCFlukeNativeBin>
-    <MCFlukeUseVisualStudioNative Condition="'$(OS)' == 'Windows_NT' and '$(MSBuildRuntimeType)' == 'Full'">true</MCFlukeUseVisualStudioNative>
   </PropertyGroup>
+  <Target Name="MCFlukeRequireWindows" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(OS)' != 'Windows_NT'" Text="MCFluke requires Windows and Visual Studio 2026." />
+  </Target>
 </Project>

@@ -64,8 +64,12 @@ def verify(name, command):
 
 
 def main():
-    directory = Path(os.environ.get("MCFLUKE_NATIVE_DIR", str(ROOT / "build" / "bin")))
-    native = directory / ("mcfluke-example.exe" if os.name == "nt" else "mcfluke-example")
+    if os.name != "nt":
+        raise RuntimeError("MCFluke example verification requires Windows.")
+    configuration = os.environ.get("MCFLUKE_CONFIGURATION", "Debug")
+    default = ROOT / "out" / "vs" / "bin" / "x64" / configuration
+    directory = Path(os.environ.get("MCFLUKE_NATIVE_DIR", default))
+    native = directory / "mcfluke-example.exe"
     verify("C", [native, "--port", "sim://187", "--count", "3"])
     verify("Python", [sys.executable, "-I", ROOT / "python" / "examples" / "read_display.py",
                       "--port", "sim://187", "--count", "3"])

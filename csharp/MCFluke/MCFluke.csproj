@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <AssemblyName>MCFluke.Managed</AssemblyName>
     <Version>0.1.0</Version>
     <Description>Managed bindings for the MCFluke Fluke 187 native library.</Description>
@@ -16,7 +16,7 @@
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
-  <ItemGroup Condition="'$(MCFlukeUseVisualStudioNative)' == 'true'">
+  <ItemGroup>
     <ProjectReference Include="..\..\native\MCFluke.Native.vcxproj">
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>

@@ -21,31 +21,29 @@ def main():
     parser.add_argument("--native-dir", type=Path,
                         default=os.environ.get("MCFLUKE_NATIVE_DIR"))
     args = parser.parse_args()
-    native = args.native_dir or (
-        ROOT / "out" / "vs" / "bin" / "x64" / args.configuration if os.name == "nt"
-        else ROOT / "build" / "bin"
-    )
+    if os.name != "nt":
+        raise RuntimeError("MCFluke offline checks require Windows.")
+    native = args.native_dir or ROOT / "out" / "vs" / "bin" / "x64" / args.configuration
     native = native.resolve()
-    suffix = ".exe" if os.name == "nt" else ""
-    library = native / ("mcfluke.dll" if os.name == "nt"
-                        else "libmcfluke.dylib" if sys.platform == "darwin" else "libmcfluke.so")
-    managed = ROOT / "csharp" / "MCFluke.Exerciser" / "bin" / args.configuration / "net10.0" / "MCFluke.Exerciser.dll"
-    required = [library, managed, *(native / (name + suffix) for name in
-                                   ("mcfluke-tests", "mcfluke-example", "mcfluke-host"))]
+    library = native / "mcfluke.dll"
+    managed = ROOT / "csharp" / "MCFluke.Exerciser" / "bin" / args.configuration / "net10.0-windows" / "MCFluke.Exerciser.dll"
+    required = [library, managed, *(native / name for name in
+                                   ("mcfluke-tests.exe", "mcfluke-example.exe", "mcfluke-host.exe"))]
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError("Build the solution before running offline checks. Missing:\n" + "\n".join(missing))
     env = os.environ.copy()
     env["MCFLUKE_LIBRARY"] = str(library)
-    env["MCFLUKE_HOST"] = str(native / ("mcfluke-host" + suffix))
+    env["MCFLUKE_HOST"] = str(native / "mcfluke-host.exe")
     env["MCFLUKE_NATIVE_DIR"] = str(native)
     env["PYTHONPATH"] = str(ROOT / "python" / "src") + (
         os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
     )
-    run([native / ("mcfluke-tests" + suffix)], env=env)
-    run([native / ("mcfluke-example" + suffix), "--port", "sim://187", "--count", "2", "--interval", "0.01"], env=env)
+    run([sys.executable, "-m", "unittest", "discover", "-s", ROOT / "tests",
+         "-p", "test_windows_build.py", "-v"], env=env)
+    run([native / "mcfluke-tests.exe"], env=env)
+    run([native / "mcfluke-example.exe", "--port", "sim://187", "--count", "2", "--interval", "0.01"], env=env)
     run([sys.executable, ROOT / "tests" / "test_bridge.py", env["MCFLUKE_HOST"]], env=env)
-    run([sys.executable, ROOT / "tests" / "test_serial.py", library], env=env)
     run([sys.executable, "-m", "unittest", "discover", "-s", ROOT / "python" / "tests", "-v"], env=env)
     run(["node", "--test"], cwd=ROOT / "javascript", env=env)
     run(["dotnet", managed, "--self-test"], env=env)

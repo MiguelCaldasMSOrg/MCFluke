@@ -307,10 +307,11 @@ internal static class ExerciserApp
     private static void PrintHelp() => Console.WriteLine("""
         MCFluke C# full exerciser (.NET 10; native ABI 1)
 
-        dotnet run --project csharp\MCFluke.Exerciser -- --help
-        dotnet run --project csharp\MCFluke.Exerciser -- --self-test
-        dotnet run --project csharp\MCFluke.Exerciser -- --port sim://187
-        dotnet run --project csharp\MCFluke.Exerciser -- --port COM3 --count 5 --interval 2
+        After Build Solution, use F5 or run the built Windows executable:
+        .\csharp\MCFluke.Exerciser\bin\Debug\net10.0-windows\MCFluke.Exerciser.exe --help
+        .\csharp\MCFluke.Exerciser\bin\Debug\net10.0-windows\MCFluke.Exerciser.exe --self-test
+        .\csharp\MCFluke.Exerciser\bin\Debug\net10.0-windows\MCFluke.Exerciser.exe --port sim://187
+        .\csharp\MCFluke.Exerciser\bin\Debug\net10.0-windows\MCFluke.Exerciser.exe --port COM3 --count 5 --interval 2
 
         --port PORT       Serial port; default COM3. Only sim://187 explicitly selects simulation.
         --count N         Bounded READ-ONLY mode: N reads, no control commands.
@@ -319,8 +320,8 @@ internal static class ExerciserApp
         --help, -h        This help; does not load native code or open a port.
 
         Native discovery: absolute MCFLUKE_LIBRARY override, application directory, then
-        Visual Studio native outputs and ancestor build\bin directories. Build the solution first; no simulator fallback.
-        The platform names are mcfluke.dll, libmcfluke.so, and libmcfluke.dylib.
+        Visual Studio native outputs. Build the Windows solution first; no simulator fallback.
+        The native library is mcfluke.dll.
 
         Interactive mode covers identity, readings, every SF button, default setup, RI,
         timeout get/set, both parsers, version, ABI, and every native status message.

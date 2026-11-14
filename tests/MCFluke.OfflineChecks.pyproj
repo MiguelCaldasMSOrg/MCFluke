@@ -27,7 +27,7 @@ MCFLUKE_CONFIGURATION=$(Configuration)</Environment>
   <ItemGroup>
     <Compile Include="..\tools\run_checks.py" />
     <Compile Include="test_bridge.py" />
-    <Compile Include="test_serial.py" />
+    <Compile Include="test_windows_build.py" />
     <Compile Include="verify_examples.py" />
     <None Include="..\tools\build.py" />
     <None Include="..\tools\verify_vs_build.py" />

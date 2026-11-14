@@ -1,7 +1,7 @@
 # JavaScript binding
 
-Node.js 22+; **zero npm runtime/test dependencies**. This ES module spawns one
-persistent native `mcfluke-host` process per connection, without a shell.
+Node.js 22+ on Windows; **zero npm runtime/test dependencies**. This ES module
+spawns one persistent native `mcfluke-host` process per connection, without a shell.
 The host calls the shared C core; JavaScript does **not** implement a serial
 protocol. Importing the module never launches a process.
 
@@ -76,9 +76,10 @@ The real port is verified as a FLUKE 187 before the host announces readiness.
 set. Either override must name an absolute executable file, and a bad override
 never falls back. Default discovery checks ancestor
 `out\vs\bin\x64\Debug` and `Release` directories first, preferring Debug when both
-exist at the same root. It then checks package-adjacent and ancestor legacy
-`build\bin` locations for `mcfluke-host.exe` (Windows) or `mcfluke-host`
-(Linux/macOS). The host needs its matching native library available. Missing
+exist at the same root. It then checks package-adjacent and ancestor files
+for `mcfluke-host.exe`; retired build directories are not searched.
+Non-Windows execution is rejected before helper discovery.
+The host needs its matching native library available. Missing
 hosts raise `HostNotFoundError`. No global configuration or environment changes
 are made by this module.
 
@@ -184,7 +185,8 @@ Resolver regressions need no native binaries:
 node --test test\resolver.test.js
 ```
 
-They verify VS Debug/Release precedence, portable legacy lookup and authoritative
-explicit overrides without writing to native output directories or changing the
-parent process environment. The fake child is strictly a transport fixture,
+They verify VS Debug/Release precedence, adjacent Windows deployment lookup,
+rejection of non-Windows execution and retired build directories, and authoritative
+explicit overrides without writing to native output directories or changing
+the parent process environment. The fake child is strictly a transport fixture,
 not a serial implementation.

@@ -6,6 +6,7 @@
   "main": "./src/index.js",
   "exports": "./src/index.js",
   "engines": { "node": ">=22" },
+  "os": ["win32"],
   "scripts": {
     "test": "node --test",
     "test:unit": "node --test test/transport.test.js test/resolver.test.js",

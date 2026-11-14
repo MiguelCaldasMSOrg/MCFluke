@@ -3,12 +3,14 @@
 
 #include <stdint.h>
 
-#if defined(_WIN32) && defined(MCFLUKE_BUILD)
+#if !defined(_WIN32)
+#error MCFluke requires Windows.
+#endif
+
+#if defined(MCFLUKE_BUILD)
 #define MCFLUKE_API __declspec(dllexport)
-#elif defined(_WIN32)
-#define MCFLUKE_API __declspec(dllimport)
 #else
-#define MCFLUKE_API __attribute__((visibility("default")))
+#define MCFLUKE_API __declspec(dllimport)
 #endif
 
 #ifdef __cplusplus

@@ -6,7 +6,7 @@ import test from 'node:test';
 const directory = fileURLToPath(new URL('..', import.meta.url));
 const moduleUrl = new URL('../src/index.js', import.meta.url).href;
 
-function checkResolver({ available, expected, override, failure }) {
+function checkResolver({ available, expected, override, failure, platform = process.platform }) {
   const environment = { ...process.env };
   delete environment.MCFLUKE_HOST;
   const script = `
@@ -14,13 +14,13 @@ function checkResolver({ available, expected, override, failure }) {
     import fs from 'node:fs';
     import path from 'node:path';
     import { resolveHostPath, HostNotFoundError } from ${JSON.stringify(moduleUrl)};
+    Object.defineProperty(process, 'platform', { value: ${JSON.stringify(platform)} });
     const root = path.resolve('..');
-    const name = process.platform === 'win32' ? 'mcfluke-host.exe' : 'mcfluke-host';
+    const name = 'mcfluke-host.exe';
     const locations = {
       debug: path.join(root, 'out', 'vs', 'bin', 'x64', 'Debug', name),
       release: path.join(root, 'out', 'vs', 'bin', 'x64', 'Release', name),
-      legacy: path.join(root, 'build', 'bin', name),
-      nearbyLegacy: path.join(root, 'javascript', 'src', 'build', 'bin', name),
+      retired: path.join(root, 'build', 'bin', name),
       adjacent: path.join(root, 'javascript', 'src', name),
       explicit: path.join(root, 'javascript', 'fixtures', name),
     };
@@ -35,25 +35,42 @@ function checkResolver({ available, expected, override, failure }) {
     ${failure
       ? `assert.throws(() => resolveHostPath(override), error => error instanceof HostNotFoundError && new RegExp(${JSON.stringify(failure.source)}, ${JSON.stringify(failure.flags)}).test(error.message));`
       : `assert.equal(resolveHostPath(override), locations[${JSON.stringify(expected)}]);`}
-    ${override ? 'assert.equal(attempts.length, 1);' : ''}
+    ${platform !== 'win32' ? 'assert.equal(attempts.length, 0);'
+      : override ? 'assert.equal(attempts.length, 1);' : ''}
+    ${override ? '' : 'assert.ok(!attempts.includes(locations.retired));'}
   `;
   return execFileSync(process.execPath, ['--input-type=module', '-e', script], {
     cwd: directory, env: environment, encoding: 'utf8', timeout: 10000, windowsHide: true,
   });
 }
 
-test('Visual Studio Debug output precedes Release and nearer legacy/adjacent hosts', () => {
+test('Visual Studio Debug output precedes Release and adjacent hosts', () => {
   checkResolver({
-    available: ['debug', 'release', 'legacy', 'nearbyLegacy', 'adjacent'], expected: 'debug',
+    available: ['debug', 'release', 'retired', 'adjacent'], expected: 'debug', platform: 'win32',
   });
 });
 
 test('Visual Studio Release output is selected when Debug is absent', () => {
-  checkResolver({ available: ['release', 'legacy', 'adjacent'], expected: 'release' });
+  checkResolver({
+    available: ['release', 'retired', 'adjacent'], expected: 'release', platform: 'win32',
+  });
 });
 
-test('legacy host discovery remains available on every supported platform', () => {
-  checkResolver({ available: ['legacy'], expected: 'legacy' });
+test('non-Windows hosts are rejected before searching even with an explicit override', () => {
+  for (const platform of ['linux', 'darwin']) {
+    checkResolver({ available: ['debug', 'adjacent'], failure: /Windows/u, platform });
+    checkResolver({
+      available: ['explicit'], override: 'explicit', failure: /Windows/u, platform,
+    });
+  }
+});
+
+test('adjacent Windows deployment hosts remain available', () => {
+  checkResolver({ available: ['retired', 'adjacent'], expected: 'adjacent' });
+});
+
+test('retired build directories are never searched', () => {
+  checkResolver({ available: ['retired'], failure: /Cannot find/u });
 });
 
 test('explicit hostPath remains authoritative over Visual Studio discovery', () => {

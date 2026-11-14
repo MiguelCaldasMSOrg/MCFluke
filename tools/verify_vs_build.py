@@ -16,11 +16,57 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def verify_native_discovery(library, application, environment):
+    with tempfile.TemporaryDirectory(prefix="MCFluke-discovery-") as directory:
+        root = Path(directory)
+        app = root / "app"
+        app.mkdir()
+        for name in ("MCFluke.Exerciser.dll", "MCFluke.Exerciser.deps.json",
+                     "MCFluke.Exerciser.runtimeconfig.json", "MCFluke.Managed.dll"):
+            shutil.copy2(application.parent / name, app / name)
+        retired = root / "build" / "bin" / library.name
+        retired.parent.mkdir(parents=True)
+        shutil.copy2(library, retired)
+
+        def check(available, override=None):
+            env = environment.copy()
+            env.pop("MCFLUKE_LIBRARY", None)
+            if override is not None:
+                env["MCFLUKE_LIBRARY"] = str(override)
+            result = subprocess.run(
+                ["dotnet", str(app / application.name), "--self-test"],
+                cwd=root, env=env, capture_output=True, text=True, timeout=30,
+            )
+            if available:
+                if result.returncode:
+                    raise RuntimeError(f"Native discovery failed:\n{result.stdout}\n{result.stderr}")
+            elif (result.returncode != 1
+                  or "BLOCKED native simulator tests" not in result.stderr
+                  or str(retired).casefold() in result.stderr.casefold()):
+                raise RuntimeError(f"Retired output was not rejected:\n{result.stdout}\n{result.stderr}")
+
+        check(False)
+        current = root / "out" / "vs" / "bin" / "x64" / "Debug" / library.name
+        current.parent.mkdir(parents=True)
+        shutil.copy2(library, current)
+        check(True)
+        current.unlink()
+        adjacent = app / library.name
+        shutil.copy2(library, adjacent)
+        check(True)
+        adjacent.unlink()
+        check(True, retired)
+    print("PASS managed native discovery: current output, adjacent deployment, explicit override; "
+          "retired output is not searched.", flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--msbuild", required=True, type=Path)
     parser.add_argument("--keep", action="store_true", help="Keep the isolated copy for IDE inspection")
     args = parser.parse_args()
+    if os.name != "nt":
+        raise RuntimeError("MCFluke build verification requires Windows and Visual Studio 2026.")
     if not (ROOT / "MCFluke.sln").read_bytes().startswith(b"\xef\xbb\xbf\r\nMicrosoft Visual Studio Solution File"):
         raise RuntimeError("Preserve the SDK-style solution BOM, leading line and CRLF encoding.")
     # MSVC deliberately excludes %TEMP% from reliable file tracking.
@@ -63,7 +109,7 @@ def main():
             return copied / "out" / "vs" / "bin" / "x64" / configuration / "mcfluke.dll"
 
         def consumer(configuration):
-            return copied / "csharp" / "MCFluke.Exerciser" / "bin" / configuration / "net10.0" / "mcfluke.dll"
+            return copied / "csharp" / "MCFluke.Exerciser" / "bin" / configuration / "net10.0-windows" / "mcfluke.dll"
 
         def verify_copy(configuration):
             if digest(native(configuration)) != digest(consumer(configuration)):
@@ -105,6 +151,9 @@ def main():
         subprocess.run(
             ["dotnet", str(consumer("Debug").with_name("MCFluke.Exerciser.dll")), "--self-test"],
             cwd=copied, env=environment, check=True,
+        )
+        verify_native_discovery(
+            native("Debug"), consumer("Debug").with_name("MCFluke.Exerciser.dll"), environment
         )
         build("Debug", "clean-debug", "Clean")
         for name, expected in inputs.items():

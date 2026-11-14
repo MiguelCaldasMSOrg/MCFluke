@@ -5,9 +5,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
 typedef struct {
-    void *handle;
-    int fd;
+    HANDLE handle;
     int simulated;
     int sim_ac;
     int sim_range;

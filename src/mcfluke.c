@@ -1,6 +1,3 @@
-#if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE
-#endif
 #include "internal.h"
 
 #include <ctype.h>
@@ -10,10 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#if defined(__APPLE__)
-#include <xlocale.h>
-#endif
 
 const char *mcfluke_version(void) { return "0.1.0"; }
 uint32_t mcfluke_abi_version(void) { return 1; }
@@ -134,23 +127,13 @@ static mcfluke_status convert_decimal(const char *text, const char *end,
     char *converted_end;
     double number;
     int conversion_error;
-#if defined(_WIN32)
     _locale_t locale = _create_locale(LC_NUMERIC, "C");
-#else
-    locale_t locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
-#endif
     if (!locale)
         return mcfluke_fail(error, MCFLUKE_OUT_OF_MEMORY, errno, "Cannot allocate the C numeric locale.");
     errno = 0;
-#if defined(_WIN32)
     number = _strtod_l(text, &converted_end, locale);
     conversion_error = errno;
     _free_locale(locale);
-#else
-    number = strtod_l(text, &converted_end, locale);
-    conversion_error = errno;
-    freelocale(locale);
-#endif
     if (converted_end != end || !isfinite(number) ||
         (conversion_error == ERANGE && number == 0.0) ||
         (conversion_error != 0 && conversion_error != ERANGE))

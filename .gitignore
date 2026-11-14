@@ -11,6 +11,5 @@ node_modules/
 .idea/
 *.user
 *.log
-.DS_Store
 /Backup/
 /UpgradeLog*.htm

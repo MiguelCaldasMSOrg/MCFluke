@@ -159,6 +159,9 @@ function isFile(candidate) {
 }
 
 export function resolveHostPath(hostPath) {
+  if (process.platform !== 'win32') {
+    throw new HostNotFoundError('MCFluke requires Windows.');
+  }
   const override = hostPath ?? process.env.MCFLUKE_HOST;
   if (override !== undefined) {
     if (typeof override !== 'string' || !path.isAbsolute(override) || !isFile(override)) {
@@ -168,7 +171,7 @@ export function resolveHostPath(hostPath) {
     }
     return override;
   }
-  const name = process.platform === 'win32' ? 'mcfluke-host.exe' : 'mcfluke-host';
+  const name = 'mcfluke-host.exe';
   let directory = path.dirname(fileURLToPath(import.meta.url));
   const ancestors = [];
   for (;;) {
@@ -184,14 +187,13 @@ export function resolveHostPath(hostPath) {
     }
   }
   for (const ancestor of ancestors) {
-    for (const candidate of [path.join(ancestor, 'build', 'bin', name), path.join(ancestor, name)]) {
-      if (isFile(candidate)) return candidate;
-    }
+    const candidate = path.join(ancestor, name);
+    if (isFile(candidate)) return candidate;
   }
   throw new HostNotFoundError(
     `Cannot find ${name}. Build the MCFluke solution in Visual Studio 2026 `
-    + '(out/vs/bin/x64/Debug or Release) or set MCFLUKE_HOST to the absolute executable path. '
-    + 'Legacy build/bin remains a fallback. The host also needs the matching native library.',
+    + 'on Windows or set MCFLUKE_HOST to the absolute executable path. '
+    + 'The host also needs the matching native library.',
   );
 }
 

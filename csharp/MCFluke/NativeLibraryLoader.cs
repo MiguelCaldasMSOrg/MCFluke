@@ -12,6 +12,11 @@ internal static class NativeLibraryLoader
             return IntPtr.Zero;
         }
 
+        if (!OperatingSystem.IsWindows())
+        {
+            throw new PlatformNotSupportedException("MCFluke requires Windows.");
+        }
+
         string? configuredPath = Environment.GetEnvironmentVariable("MCFLUKE_LIBRARY");
         if (!string.IsNullOrEmpty(configuredPath))
         {
@@ -25,20 +30,18 @@ internal static class NativeLibraryLoader
             return NativeLibrary.Load(configuredPath);
         }
 
-        string fileName = OperatingSystem.IsWindows() ? "mcfluke.dll"
-            : OperatingSystem.IsMacOS() ? "libmcfluke.dylib"
-            : "libmcfluke.so";
+        const string fileName = "mcfluke.dll";
         var candidates = new List<string> { Path.Combine(AppContext.BaseDirectory, fileName) };
         string? configuration = assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration;
         for (DirectoryInfo? ancestor = new(AppContext.BaseDirectory); ancestor is not null; ancestor = ancestor.Parent)
         {
             foreach (string build in new[] { configuration, "Debug", "Release" }.OfType<string>().Distinct())
+            {
                 candidates.Add(Path.Combine(ancestor.FullName, "out", "vs", "bin", "x64", build, fileName));
-            candidates.Add(Path.Combine(ancestor.FullName, "build", "bin", fileName));
+            }
         }
 
-        foreach (string candidate in candidates.Distinct(
-            OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal))
+        foreach (string candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
         {
             if (NativeLibrary.TryLoad(candidate, out IntPtr handle))
             {
@@ -47,7 +50,7 @@ internal static class NativeLibraryLoader
         }
 
         throw new DllNotFoundException(
-            $"Cannot load {fileName}. Build MCFluke.sln in Visual Studio or set MCFLUKE_LIBRARY " +
+            $"Cannot load {fileName}. Build MCFluke.sln in Visual Studio on Windows or set MCFLUKE_LIBRARY " +
             $"to its absolute path. Searched:{Environment.NewLine}{string.Join(Environment.NewLine, candidates)}");
     }
 }

@@ -8,6 +8,7 @@ import threading
 
 
 ABI_VERSION = 1
+LIBRARY_NAME = "mcfluke.dll"
 
 
 class DllNotFoundError(OSError):
@@ -50,46 +51,27 @@ class Reading(C.Structure):
     ]
 
 
-def _names():
-    if sys.platform == "win32":
-        return ("mcfluke.dll",)
-    if sys.platform == "darwin":
-        return ("libmcfluke.dylib",)
-    return ("libmcfluke.so", "libmcfluke.so.1")
-
-
 def _candidates():
     seen = set()
     package = Path(__file__).resolve().parent
     ancestors = (package, *package.parents)
     for ancestor in ancestors:
         for configuration in ("Debug", "Release"):
-            directory = ancestor / "out" / "vs" / "bin" / "x64" / configuration
-            for name in _names():
-                candidate = directory / name
-                if candidate not in seen and candidate.is_file():
-                    seen.add(candidate)
-                    yield str(candidate)
-    for ancestor in ancestors:
-        for directory in (ancestor, ancestor / "build" / "bin"):
-            for name in _names():
-                candidate = directory / name
-                if candidate not in seen and candidate.is_file():
-                    seen.add(candidate)
-                    yield str(candidate)
-    for directory in (Path(sys.prefix) / "lib", Path(sys.prefix) / "bin"):
-        for name in _names():
-            candidate = directory / name
+            candidate = ancestor / "out" / "vs" / "bin" / "x64" / configuration / LIBRARY_NAME
             if candidate not in seen and candidate.is_file():
                 seen.add(candidate)
                 yield str(candidate)
-    # On macOS, importing ctypes.util itself loads libc.
-    from ctypes.util import find_library
-
-    installed = find_library("mcfluke")
-    if installed:
-        yield installed
-    yield from _names()
+    for ancestor in ancestors:
+        candidate = ancestor / LIBRARY_NAME
+        if candidate not in seen and candidate.is_file():
+            seen.add(candidate)
+            yield str(candidate)
+    for directory in os.get_exec_path():
+        candidate = Path(directory) / LIBRARY_NAME
+        if candidate not in seen and candidate.is_file():
+            seen.add(candidate)
+            yield str(candidate)
+    yield LIBRARY_NAME
 
 
 class Library:
@@ -153,6 +135,8 @@ _libraries_lock = threading.Lock()
 
 
 def load(library_path=None):
+    if sys.platform != "win32":
+        raise DllNotFoundError("MCFluke requires Windows and a 64-bit Python interpreter.")
     override = library_path if library_path is not None else os.environ.get("MCFLUKE_LIBRARY")
     if override is not None:
         override = os.fspath(override)
@@ -167,7 +151,7 @@ def load(library_path=None):
         failures = []
         for candidate in (override,) if override else _candidates():
             try:
-                # The public API is cdecl, including on Windows.
+                # The public API is cdecl.
                 dll = C.CDLL(candidate)
             except OSError as exc:
                 failures.append(f"{candidate}: {exc}")
@@ -178,9 +162,8 @@ def load(library_path=None):
         detail = "\n".join(failures)
         raise DllNotFoundError(
             "Cannot load the MCFluke native library. Build the MCFluke solution in "
-            "Visual Studio 2026 (out/vs/bin/x64/Debug or Release), install the library "
-            "on the OS library search path, or set "
+            "Visual Studio 2026 on Windows, install the library "
+            "on the Windows DLL search path, or set "
             "MCFLUKE_LIBRARY to its absolute path. Check architecture and dependent "
-            "libraries as well; Windows requires 64-bit Python. Legacy build/bin "
-            f"remains a fallback.\n{detail}"
+            f"libraries as well; Windows requires 64-bit Python.\n{detail}"
         )

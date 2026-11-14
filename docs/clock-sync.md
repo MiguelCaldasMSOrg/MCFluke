@@ -92,7 +92,7 @@ allowance covers clock sampling granularity and short-window drift.
 The exact instant at which firmware latches PS, acknowledgement semantics and
 divider reset behavior are not specified by Fluke's original technical note.
 Readback feedback addresses these uncertainties empirically, but does not
-turn Windows/Linux/macOS or USB serial into a real-time system.
+turn Windows or USB serial into a real-time system.
 
 Significant PC clock/time-zone changes, frozen or malformed counter data,
 inconsistent readbacks, lost acknowledgements and excessive scheduling
@@ -110,8 +110,8 @@ including first-write success without unnecessary repeats, and cover
 latency compensation, divider phase, midnight, non-UTC zones, clock steps,
 late deadlines, nonconvergence, counter rollover and cancellation. Native
 tests verify binary framing, fresh read-modify-write, non-clock byte
-preservation and uncertain-delivery handling. POSIX pseudo-terminal tests use
-the actual serial backend with embedded NUL/CR settings bytes.
+preservation and uncertain-delivery handling, including embedded NUL/CR
+settings bytes. These offline tests do not validate physical serial timing.
 
 The existing ABI and APIs remain unchanged. The two native clock functions
 and their language bindings are additive; rebuild the native library together

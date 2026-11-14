@@ -1,6 +1,7 @@
 # Python binding
 
-Python 3.10+; no runtime or test dependencies beyond the standard library.
+64-bit Python 3.10+ on Windows; no runtime or test dependencies beyond the
+standard library.
 The binding calls the **same native C core** through `ctypes.CDLL` (cdecl).
 It does not implement a serial protocol. Importing `mcfluke` does not load native code.
 
@@ -66,11 +67,12 @@ dependency; the commands here do not install or download anything.
 `MCFLUKE_LIBRARY`, when set, must be an **absolute file path** and is authoritative
 (a bad override never falls back). Without an override, discovery checks
 ancestor `out\vs\bin\x64\Debug` and `Release` directories first, preferring Debug
-when both exist at the same root. Then it checks adjacent and ancestor legacy
-`build\bin` directories, Python's installation `lib`/`bin`, and the platform's
-installed-library search. The IDE's explicit per-configuration override takes
-precedence over that default search. Names are `mcfluke.dll`, `libmcfluke.so`
-(also `.so.1`), or `libmcfluke.dylib`. Architecture/dependencies must match Python.
+when both exist at the same root. Then it checks adjacent and ancestor
+library files, Windows `PATH`, and the default Windows DLL search.
+Retired build directories are not searched. The IDE's explicit
+per-configuration override takes
+precedence over that default search. The native library is `mcfluke.dll`;
+architecture/dependencies must match Python. Non-Windows loading is rejected.
 Missing libraries produce `DllNotFoundError` with remediation. ABI 1 is required.
 
 ## API
@@ -158,7 +160,7 @@ implicitly in the examples.
 ## Offline tests and maintainer checks
 
 Visual Studio Test Explorer uses the configured stdlib unittest discovery.
-For portable command-line test runs from `python`, with `PYTHONPATH` set as above:
+For command-line test runs from `python`, with `PYTHONPATH` set as above:
 
 ```powershell
 python -m unittest discover -s tests -v

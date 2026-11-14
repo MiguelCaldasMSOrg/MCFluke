@@ -205,8 +205,7 @@ static void decimal_conversion(void)
         "1.00000000000000011102230246251565404236316680908203126"
     };
     const char *comma_locales[] = {
-        "de_DE.UTF-8", "fr_FR.UTF-8", "pt_PT.UTF-8", "de-DE",
-        "German_Germany.1252", "Portuguese_Portugal.1252"
+        "de-DE", "German_Germany.1252", "Portuguese_Portugal.1252"
     };
     const char *original = setlocale(LC_NUMERIC, NULL);
     char saved_locale[256], selected_locale[256], response[160];
