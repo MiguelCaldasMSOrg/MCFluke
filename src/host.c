@@ -166,6 +166,12 @@ int main(int argc, char **argv)
         } else if (strcmp(verb, "display") == 0 && !*argument) {
             status = mcfluke_read_display(device, &reading, &error);
             kind = READING_RESULT;
+        } else if (strcmp(verb, "clock") == 0 && !*argument) {
+            status = mcfluke_get_clock(device, &timeout_value, &error);
+            kind = NUMBER_RESULT;
+        } else if (strcmp(verb, "set-clock") == 0 && parse_u32(argument, &timeout_value)) {
+            status = mcfluke_set_clock(device, timeout_value, &timeout_value, &error);
+            kind = NUMBER_RESULT;
         } else if (strcmp(verb, "parse-id") == 0) {
             status = mcfluke_parse_identity(argument, &identity, &error);
             kind = ID_RESULT;

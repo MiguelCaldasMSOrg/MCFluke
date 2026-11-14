@@ -102,6 +102,12 @@ class Library:
             "mcfluke_read_display": (
                 C.c_int32, [handle, C.POINTER(Reading), error]
             ),
+            "mcfluke_get_clock": (
+                C.c_int32, [handle, C.POINTER(C.c_uint32), error]
+            ),
+            "mcfluke_set_clock": (
+                C.c_int32, [handle, C.c_uint32, C.POINTER(C.c_uint32), error]
+            ),
             "mcfluke_get_timeout": (
                 C.c_int32, [handle, C.POINTER(C.c_uint32), error]
             ),

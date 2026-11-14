@@ -7,6 +7,7 @@ import {
   DeviceClosedError, InvalidArgumentError, NativeTimeoutError,
   ConfirmationRequiredError, UnsupportedOperationError, WrongModelError,
   CommandRejectedError, Button, ReadingState, resolveHostPath,
+  CLOCK_TICKS_PER_SECOND, CLOCK_TICKS_PER_DAY,
 } from '../src/index.js';
 import { ChildFixture, IDENTITY, READING } from '../fixtures/child-fixture.js';
 
@@ -123,6 +124,150 @@ test('parser calls delegate unchanged text; nonnumeric display is null', async (
   assert.equal(result.value, null);
   assert.equal(result.display, 'OL V DC');
   assert.equal(child.requests[1].argument, 'QM,OL V DC');
+});
+
+test('clock verbs preserve unsigned results and exact decimal input without rounding', async (t) => {
+  assert.equal(CLOCK_TICKS_PER_SECOND, 10);
+  assert.equal(CLOCK_TICKS_PER_DAY, 864000);
+  let counter = 0;
+  const { meter, child } = await open(t, (request, process_) => {
+    if (!['clock', 'set-clock'].includes(request.verb)) return false;
+    process_.sendChunks({ id: request.id, ok: true, result: counter });
+    return true;
+  });
+  for (const raw of [0, 2147483648, 4294967295]) {
+    counter = raw;
+    assert.equal(await meter.readClockCounter(), raw);
+    assert.equal(child.requests.at(-1).argument, '');
+    assert.equal(child.requests.at(-1).verb, 'clock');
+  }
+  for (const ticks of [0, 12345, 863999]) {
+    counter = 3 * CLOCK_TICKS_PER_DAY + ticks;
+    assert.equal(await meter.setClock(ticks), counter);
+    assert.equal(child.requests.at(-1).verb, 'set-clock');
+    assert.equal(child.requests.at(-1).argument, String(ticks));
+    assert.equal(child.requests.at(-1).extra.length, 0);
+  }
+  counter = 4294967295;
+  assert.equal(await meter.setClock(0), counter);
+});
+
+test('invalid clock inputs never send a bridge request', async (t) => {
+  const { meter, child } = await open(t);
+  for (const ticks of [
+    -1, 864000, 2 ** 32, true, false, 0.1, '10', null, undefined,
+    NaN, Infinity, -Infinity, 10n, [], {},
+  ]) {
+    await assert.rejects(meter.setClock(ticks), InvalidArgumentError);
+  }
+  assert.equal(child.requests.length, 0);
+});
+
+test('both clock response types must be safe unsigned 32-bit integers', async (t) => {
+  for (const verb of ['clock', 'set-clock']) {
+    for (const value of [-1, 4294967296, 0.1, 2 ** 53, '10', true, null, {}, []]) {
+      await t.test(`${verb} rejects ${JSON.stringify(value)}`, async (subtest) => {
+        const { meter, child } = await open(subtest, (request, process_) => {
+          process_.reply(request, value);
+          return true;
+        });
+        const call = verb === 'clock' ? meter.readClockCounter() : meter.setClock(0);
+        await assert.rejects(call, ProtocolError);
+        await meter.close();
+        assert.ok(child.ended);
+      });
+    }
+  }
+});
+
+test('clock errors retain native details without poisoning the connection', async (t) => {
+  let status = 3;
+  const { meter } = await open(t, (request, child) => {
+    if (!['clock', 'set-clock'].includes(request.verb)) return false;
+    child.stderr.write('clock diagnostic\n');
+    child.reject(request, status, 'clock operation failed');
+    return true;
+  });
+  for (const verb of ['clock', 'set-clock']) {
+    for (const [code, Type] of [
+      [3, NativeTimeoutError], [2, MCFlukeError], [4, ProtocolError], [5, CommandRejectedError],
+    ]) {
+      status = code;
+      const call = verb === 'clock' ? meter.readClockCounter() : meter.setClock(12345);
+      await assert.rejects(call, (error) => {
+        assert.ok(error instanceof Type);
+        assert.equal(error.status, status);
+        assert.equal(error.osCode, 123);
+        assert.equal(error.operation, verb);
+        assert.match(error.stderr, /clock diagnostic/u);
+        return true;
+      });
+    }
+  }
+  assert.deepEqual(await meter.readDisplay(), READING);
+});
+
+test('clock operations share the FIFO and drain before close, with later calls rejected', async (t) => {
+  let active = 0;
+  let maximum = 0;
+  const { meter, child } = await open(t, (request, process_) => {
+    if (request.verb === 'close') return false;
+    active += 1;
+    maximum = Math.max(maximum, active);
+    process_.later(5, () => {
+      active -= 1;
+      if (['clock', 'set-clock'].includes(request.verb)) process_.reply(request, 2592123);
+      else process_.defaultReply(request);
+    });
+    return true;
+  });
+  const writing = meter.setClock(123);
+  const clock = meter.readClockCounter();
+  const display = meter.readDisplay();
+  const closing = meter.close();
+  await assert.rejects(meter.readClockCounter(), DeviceClosedError);
+  await assert.rejects(meter.setClock(123), DeviceClosedError);
+  assert.equal(await writing, 2592123);
+  assert.equal(await clock, 2592123);
+  assert.deepEqual(await display, READING);
+  await closing;
+  assert.equal(maximum, 1);
+  assert.deepEqual(child.requests.map(({ verb }) => verb), ['set-clock', 'clock', 'display', 'close']);
+});
+
+test('clock writes retain a conservative bridge watchdog using the current native timeout', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let pending;
+  const { meter, child } = await open(t, (request) => {
+    if (request.verb !== 'set-clock') return false;
+    pending = request;
+    return true;
+  });
+  const setting = meter.setTimeout(1500);
+  const writing = meter.setClock(12345);
+  await setting;
+  for (let index = 0; index < 5; index += 1) await Promise.resolve();
+  assert.ok(pending);
+  t.mock.timers.tick(4001);
+  assert.equal(meter.closed, false);
+  child.reply(pending, 2604345);
+  assert.equal(await writing, 2604345);
+  await meter.close();
+});
+
+test('clock writes still have a bounded response deadline', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { meter, child } = await open(t, (request) => request.verb === 'set-clock');
+  const rejected = assert.rejects(meter.setClock(0), (error) => {
+    assert.ok(error instanceof BridgeError);
+    assert.equal(error.operation, 'set-clock');
+    return true;
+  });
+  for (let index = 0; index < 5; index += 1) await Promise.resolve();
+  t.mock.timers.tick(1201);
+  await rejected;
+  assert.ok(child.ended);
+  await meter.close();
 });
 
 test('argument delimiters, invalid integers and implicit confirmations are rejected locally', async (t) => {

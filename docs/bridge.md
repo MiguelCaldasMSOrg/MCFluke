@@ -38,6 +38,8 @@ Replies are one JSON object per line, followed by LF:
 |---|---|---|
 | `id` | empty | `{model,firmware,serialNumber}` |
 | `display` | empty | `{display,unit,state,value}` |
+| `clock` | empty | raw uint32 decisecond counter |
+| `set-clock` | integer deciseconds since midnight, 0..863999 | raw uint32 counter written |
 | `button` | `code confirmation`, e.g. `17 0` | null |
 | `defaults` | empty | null |
 | `reset` | confirmation integer | null |
@@ -53,6 +55,10 @@ Reading states are `0` numeric, `1` out of range, `2` other text. Non-numeric
 readings have JSON `value: null`, never a numeric zero stand-in. Reset and
 calibration confirmations must be exactly `1`; 187-only restrictions still
 apply. Structured failures preserve native status and OS diagnostics.
+
+Clock writes read fresh settings and replace only the clock field. The
+compound QS/PS operation shares one native timeout and is not retried on an
+ambiguous acknowledgement. See [clock synchronization](clock-sync.md).
 
 Stdout is reserved for protocol JSON; consumers must not parse terminal
 decoration or diagnostics as replies. EOF closes the device. A malformed

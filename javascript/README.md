@@ -16,7 +16,7 @@ node examples\read-display.js --port sim://187 --count 3
 For a real connected meter explicitly use its port, for example `--port COM3`
 (also the default). The example gets identity once and prints each primary
 display, unit, state and value **every two seconds**. It sends no button,
-default-setup or reset commands. `--count N` bounds reads (zero means identity
+default-setup, reset or clock commands. `--count N` bounds reads (zero means identity
 only), `--interval SECONDS` speeds up tests, and `--timeout MS` defaults to 1500.
 Ctrl-C disposes the connection and exits 130. Errors print diagnostics and exit 1.
 There is no automatic reconnect or fallback to simulation.
@@ -55,6 +55,8 @@ All methods are asynchronous, serialized per client and return promises:
 |---|---|
 | `getIdentity()` | Frozen `{model, firmware, serialNumber}` |
 | `readDisplay()` | Frozen `{display, unit, state, value}` |
+| `readClockCounter()` | Raw unsigned 32-bit clock counter in deciseconds |
+| `setClock(timeOfDayTicks)` | Set integer ticks since midnight; return actual written raw counter |
 | `getTimeout()` / `setTimeout(ms)` | Number / null; native timeout 50..60000 ms |
 | `pressButton(Button.RANGE)` | Native SF button command; null |
 | `pressButton(Button.CALIBRATION, {confirmCalibration:true})` | Explicitly enter calibration workflow, not perform calibration; null |
@@ -88,9 +90,41 @@ Calls accepted before `close()` drain in FIFO order; calls after it immediately
 reject with `DeviceClosedError`. Queued calls after a transport failure reject
 without sending. Deadlines are computed when requests actually start, using the
 most recently successful native timeout (twice that timeout plus one second).
-The startup budget uses the same formula. `closed` becomes true as soon as
+The startup budget uses the same formula. Clock writes retain a conservative
+bridge watchdog of four times the native timeout plus one second. These are
+transport watchdogs, not additional native transaction budgets: the entire
+native QS-read/PS-write operation shares **one timeout/deadline**, without
+renewing it between transactions.
+`closed` becomes true as soon as
 shutdown/failure starts. Explicit `try/finally` disposal is recommended;
 `Symbol.asyncDispose` is supported where the runtime supports async disposal.
+
+## Experimental clock support
+
+Clock access uses the community-documented extended 18x **QS/PS** protocol.
+This feature is **experimental, not manufacturer-certified** and requires a
+clock-capable native host/core (additive exports within ABI 1).
+
+`readClockCounter()` sends bridge verb `clock` with an empty argument and
+returns a safe integer in `0..4294967295`. This is a running raw unsigned 32-bit
+**decisecond counter**, not Unix/UTC time or a date/epoch.
+`CLOCK_TICKS_PER_SECOND` is 10 and `CLOCK_TICKS_PER_DAY` is 864000.
+`setClock(timeOfDayTicks)` accepts only an integer `0..863999` ticks since
+midnight and sends `set-clock` with that decimal argument. Booleans, strings,
+BigInts, fractions and out-of-range values are rejected locally; there is no
+rounding, wrapping, timezone conversion or automatic synchronization.
+
+The native core performs a **fresh QS** read of the current 29-byte settings
+block, changes only the four clock bytes and writes via PS, preserving every
+non-clock setting. Both transactions share one native operation deadline.
+It chooses the closest representable day to the existing raw
+counter, including natural midnight rollover. The setter returns the **exact raw
+uint32 counter written after acknowledgement**, which can differ from the input
+by whole days; it is not a later readback. Readback can advance as the clock
+runs, and the raw counter eventually wraps. Both response types are validated as
+safe integers in the full unsigned 32-bit range. Operations use the same
+per-client queue, disposal guards and structured errors as existing methods.
+The read-only examples never invoke clock operations.
 
 ## Offline tests
 

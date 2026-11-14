@@ -125,6 +125,13 @@ Factory reset requires typed confirmation. Calibration entry has a separate
 confirmation and warning; it is not an automatic calibration procedure.
 Neither is performed automatically on real hardware.
 
+Menu **13** synchronizes the Fluke clock to the PC's local time after typed
+**SYNC** confirmation. It measures turnaround, compensates minute-boundary
+settings, reads the clock back, and refines the timing over three or four
+minute transitions. Other settings are preserved. This uses experimental
+18x `QS` / `PS` commands; see [clock synchronization](docs/clock-sync.md) for
+protocol evidence, timing assumptions and accuracy limits.
+
 Run its complete offline self-test explicitly:
 
 ```powershell
@@ -167,6 +174,10 @@ The documented interface provides `ID`, `QM`, `SF`, `DS` and `RI`. MCFluke
 preserves the displayed text, numerical value in displayed units, and
 out-of-range/text states. It does not silently convert mV to V or an overload
 to a zero-valued measurement.
+
+Clock access additionally uses community-documented binary `QS` / `PS`.
+The front-panel editor is minute-resolution, but this counter uses deciseconds.
+These commands are not part of Fluke's original five-command technical note.
 
 `QM` reports the **primary** display only. The published interface does not
 give a full LCD/secondary-display query or remote rotary-switch control.

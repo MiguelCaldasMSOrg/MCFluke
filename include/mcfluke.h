@@ -77,6 +77,11 @@ typedef struct {
     char unit[32];
 } mcfluke_reading;
 
+enum {
+    MCFLUKE_CLOCK_TICKS_PER_SECOND = 10,
+    MCFLUKE_CLOCK_TICKS_PER_DAY = 864000
+};
+
 MCFLUKE_API const char *mcfluke_version(void);
 MCFLUKE_API uint32_t mcfluke_abi_version(void);
 MCFLUKE_API const char *mcfluke_status_message(int32_t status);
@@ -96,6 +101,18 @@ MCFLUKE_API mcfluke_status mcfluke_get_identity(
     mcfluke_device *device, mcfluke_identity *identity, mcfluke_error *error);
 MCFLUKE_API mcfluke_status mcfluke_read_display(
     mcfluke_device *device, mcfluke_reading *reading, mcfluke_error *error);
+/* Extended 18x protocol: QS returns a running uint32 decisecond counter.
+ * PS replaces settings, so set_clock first reads the current 29-byte settings
+ * block and changes ONLY its four clock bytes. No other settings are altered.
+ * time_of_day_ticks must be 0..863999. The nearest representable counter day
+ * is retained, including a natural midnight rollover. written_counter may be
+ * NULL; otherwise it receives the exact uint32 value sent after ACK success.
+ * The setter's turnaround includes the preliminary QS transaction. */
+MCFLUKE_API mcfluke_status mcfluke_get_clock(
+    mcfluke_device *device, uint32_t *counter, mcfluke_error *error);
+MCFLUKE_API mcfluke_status mcfluke_set_clock(
+    mcfluke_device *device, uint32_t time_of_day_ticks, uint32_t *written_counter,
+    mcfluke_error *error);
 MCFLUKE_API mcfluke_status mcfluke_get_timeout(
     mcfluke_device *device, uint32_t *timeout_ms, mcfluke_error *error);
 MCFLUKE_API mcfluke_status mcfluke_set_timeout(

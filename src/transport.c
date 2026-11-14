@@ -20,7 +20,16 @@
 #endif
 
 #if defined(_WIN32)
-uint64_t mcfluke_now_ms(void) { return (uint64_t)GetTickCount64(); }
+uint64_t mcfluke_now_ms(void)
+{
+    LARGE_INTEGER counter, frequency;
+    uint64_t ticks, rate;
+    (void)QueryPerformanceCounter(&counter);
+    (void)QueryPerformanceFrequency(&frequency);
+    ticks = (uint64_t)counter.QuadPart;
+    rate = (uint64_t)frequency.QuadPart;
+    return (ticks / rate) * 1000 + ((ticks % rate) * 1000) / rate;
+}
 
 static mcfluke_status os_error(mcfluke_error *error, const char *operation)
 {
@@ -60,6 +69,7 @@ mcfluke_status mcfluke_transport_open(mcfluke_transport *transport,
     transport->fd = -1;
     if (strcmp(port, "sim://187") == 0) {
         transport->simulated = 1;
+        transport->sim_clock_started = mcfluke_now_ms();
         return MCFLUKE_OK;
     }
 #if defined(_WIN32)
@@ -183,12 +193,33 @@ static mcfluke_status simulate_write(mcfluke_transport *transport,
 {
     char command[32];
     const char *reply = "1\r";
+    if (size == 33 && memcmp(data, "PS ", 3) == 0 && data[32] == '\r') {
+        const unsigned char *body = (const unsigned char *)data + 3;
+        memcpy(transport->sim_settings, body, 29);
+        transport->sim_clock_base = (uint32_t)body[12] | ((uint32_t)body[13] << 8) |
+            ((uint32_t)body[14] << 16) | ((uint32_t)body[15] << 24);
+        transport->sim_clock_started = mcfluke_now_ms();
+        memcpy(transport->pending, "0\r", 2);
+        transport->pending_size = 2;
+        transport->pending_position = 0;
+        return MCFLUKE_OK;
+    }
     if (size >= sizeof(command))
         return mcfluke_fail(error, MCFLUKE_INVALID_ARGUMENT, 0, "Simulator command is too long.");
     memcpy(command, data, size);
     command[size] = '\0';
     if (strcmp(command, "ID\r") == 0) {
         reply = "0\rFLUKE 187,SIM-1.0,SIMULATED\r";
+    } else if (strcmp(command, "QS\r") == 0) {
+        uint32_t ticks = transport->sim_clock_base +
+            (uint32_t)((mcfluke_now_ms() - transport->sim_clock_started) / 100);
+        size_t i;
+        memcpy(transport->pending, "0\rQS,", 5);
+        memcpy(transport->pending + 5, transport->sim_settings, 29);
+        for (i = 0; i < 4; ++i) transport->pending[5 + 12 + i] = (char)(ticks >> (8 * i));
+        transport->pending_size = 34;
+        transport->pending_position = 0;
+        return MCFLUKE_OK;
     } else if (strcmp(command, "QM\r") == 0) {
         if (transport->sim_range)
             reply = transport->sim_ac ? "0\rQM,+1234.0 mV AC\r" : "0\rQM,+1234.0 mV DC\r";
@@ -196,6 +227,10 @@ static mcfluke_status simulate_write(mcfluke_transport *transport,
             reply = transport->sim_ac ? "0\rQM,+1.234 V AC\r" : "0\rQM,+1.234 V DC\r";
     } else if (strcmp(command, "DS\r") == 0 || strcmp(command, "RI\r") == 0) {
         transport->sim_ac = transport->sim_range = 0;
+        if (strcmp(command, "RI\r") == 0) {
+            transport->sim_clock_base = 0;
+            transport->sim_clock_started = mcfluke_now_ms();
+        }
         reply = "0\r";
     } else if (size == 6 && strncmp(command, "SF ", 3) == 0 && command[5] == '\r') {
         int key = (command[3] - '0') * 10 + command[4] - '0';
@@ -235,9 +270,9 @@ static mcfluke_status wait_ready(int fd, short events, uint32_t timeout_ms, mcfl
 mcfluke_status mcfluke_transport_write(mcfluke_transport *transport,
     const char *data, size_t size, uint32_t timeout_ms, mcfluke_error *error)
 {
-    if (transport->simulated) return simulate_write(transport, data, size, error);
     if (!timeout_ms)
         return mcfluke_fail(error, MCFLUKE_TIMEOUT, 0, "Command deadline expired before writing.");
+    if (transport->simulated) return simulate_write(transport, data, size, error);
 #if defined(_WIN32)
     {
         COMMTIMEOUTS timeouts = {MAXDWORD, 0, timeout_ms, 0, timeout_ms};

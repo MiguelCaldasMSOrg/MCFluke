@@ -7,15 +7,17 @@ Interface Specification**, last updated 2000-11-27:
 
 The implementation is original C code based on the documented interface. The
 Fluke document and sigrok source code are not bundled in this repository.
-Fluke's technical note describes only some serial capabilities; MCFluke does
-not invent additional commands for undocumented functionality.
+Fluke's technical note describes only some serial capabilities. Extended
+clock access uses the independently evidenced 18x `QS` / `PS` commands
+described in [clock synchronization](clock-sync.md), not guessed commands.
 
 ## Wire framing and supported operations
 
 9600 baud, eight data bits, no parity, one stop bit, no hardware or software
 handshake. Commands terminate with CR, not LF. Responses begin with `0<CR>` for
 success or `1<CR>` for rejection. Successful queries have another CR-terminated
-ASCII line. All transaction phases share one bounded timeout.
+ASCII line for the original text commands. The extended QS response is
+length-framed binary data. All phases of an operation share a bounded timeout.
 
 | Command | C entry point | Response / effect |
 |---|---|---|
@@ -24,6 +26,8 @@ ASCII line. All transaction phases share one bounded timeout.
 | `SF nn` | `mcfluke_press_button` | A remote button press; meter can reject it in its present mode |
 | `DS` | `mcfluke_default_setup` | Cancel / return to power-up state, **not** factory reset |
 | `RI` | `mcfluke_reset_instrument` | Reset user settings and clock; explicit confirmation required |
+| `QS` (extended) | `mcfluke_get_clock` | Running uint32 decisecond clock counter |
+| `QS` then `PS` (extended) | `mcfluke_set_clock` | Fresh settings read; replace only four clock bytes; acknowledge |
 
 `mcfluke_open` verifies that the attached instrument identifies as `FLUKE 187`
 before exposing a usable connection. There are no automatic retries of
@@ -80,11 +84,13 @@ when the reading is printed, not from the Fluke. `QM` contains no timestamp.
 Numeric convenience values use concise formatting; the original `display`
 text retains the meter's exact digits and trailing zeros.
 
-This published command set does **not** provide a secondary-display query,
+The original published five-command set does **not** provide a secondary-display query,
 complete LCD annunciators, timestamps from the meter, direct rotary-switch
 position changes, or a full structured setup/clock/calibration API. Remote
 button presses can navigate some modes, but cannot physically move the rotary
-switch. Do not infer more precision or update rate than the instrument provides.
+switch. The separate community clock extension does not expose a general
+settings editor or calibration API. Do not infer more precision or update rate
+than the instrument provides.
 
 ## Ownership and errors
 
@@ -106,6 +112,7 @@ It is **never** selected because a real port failed. It identifies with firmware
 `SIM-1.0`, serial `SIMULATED`, and initially reports `+1.234 V DC`. Blue toggles
 AC/DC; Range toggles V/mV. Defaults, reset and Cancel restore its baseline.
 Other supported buttons acknowledge without emulating the complete meter UI.
+Its QS/PS clock runs at decisecond resolution; RI resets that simulated clock.
 
 The simulator tests protocol/binding integration, not electrical behavior,
 measurement accuracy, calibration, every mode-dependent rejection, or safety.

@@ -135,6 +135,13 @@ internal static class NativeMethods
     [DllImport(LibraryName, EntryPoint = "mcfluke_read_display", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     internal static extern int ReadDisplay(SafeDeviceHandle device, out NativeReading reading, out NativeError error);
 
+    [DllImport(LibraryName, EntryPoint = "mcfluke_get_clock", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int GetClock(SafeDeviceHandle device, out uint counter, out NativeError error);
+
+    [DllImport(LibraryName, EntryPoint = "mcfluke_set_clock", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
+    internal static extern int SetClock(SafeDeviceHandle device, uint timeOfDayTicks,
+        out uint writtenCounter, out NativeError error);
+
     [DllImport(LibraryName, EntryPoint = "mcfluke_get_timeout", CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
     internal static extern int GetTimeout(SafeDeviceHandle device, out uint timeoutMilliseconds, out NativeError error);
 

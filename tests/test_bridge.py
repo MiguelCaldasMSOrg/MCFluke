@@ -22,6 +22,19 @@ def exchange(requests):
 
 
 class BridgeTests(unittest.TestCase):
+    def test_clock_operations_preserve_measurement_mode(self):
+        messages = exchange([
+            "1\tbutton\t10 0\n", "2\tbutton\t17 0\n",
+            "3\tset-clock\t432000\n", "4\tclock\t\n", "5\tdisplay\t\n",
+            "6\tset-clock\t864000\n", "7\tclose\t\n",
+        ])[1:]
+        written = messages[2]["result"]
+        self.assertEqual(written % 864000, 432000)
+        self.assertLess((messages[3]["result"] - written) & 0xFFFFFFFF, 100)
+        self.assertEqual(messages[4]["result"]["display"], "+1234.0 mV AC")
+        self.assertFalse(messages[5]["ok"])
+        self.assertEqual(messages[5]["error"]["status"], 1)
+
     def test_round_trip(self):
         messages = exchange([
             "1\tid\t\n", "2\tdisplay\t\n", "3\tversion\t\n",

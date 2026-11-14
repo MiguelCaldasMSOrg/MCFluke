@@ -83,6 +83,7 @@ internal static class ExerciserApp
                 7  Get timeout              8  Set timeout
                 9  Parse an ID payload     10  Parse a full QM display line
                11  Version and ABI        12  Status messages
+               13  Synchronize Fluke clock (about 3-4 minutes)
                 h  Help                    q  Quit
                """);
             string? choice = await ReadLineAsync("Choice: ", token);
@@ -151,6 +152,17 @@ internal static class ExerciserApp
                             Console.WriteLine($"{(int)status,2} {status,-22} {FlukeProtocol.GetStatusMessage(status)}");
                         }
                         break;
+                    case "13":
+                        Console.WriteLine("Experimental 18x QS/PS clock synchronization; other settings are preserved by read-modify-write.");
+                        Console.WriteLine("It performs three timed minute-boundary writes, or a fourth if needed, and checks clock readback.");
+                        Console.WriteLine("Keep the meter awake and optical head fixed; do not change settings or press meter buttons during synchronization.");
+                        Console.WriteLine("Subsecond results are measured estimates: the exact firmware latch/divider behavior is not manufacturer-specified.");
+                        if (await ConfirmAsync("Type SYNC to synchronize to the PC's local clock: ", "SYNC", token))
+                        {
+                            await ClockSynchronization.RunAsync(new FlukeClockSyncMeter(device),
+                                new SystemClockSyncTime(), Console.WriteLine, token);
+                        }
+                        break;
                     case "h":
                     case "help":
                         PrintHelp();
@@ -160,7 +172,7 @@ internal static class ExerciserApp
                         break;
                 }
             }
-            catch (Exception exception) when (exception is FlukeException or ArgumentException)
+            catch (Exception exception) when (exception is FlukeException or ArgumentException or ClockSyncException)
             {
                 hadError = true;
                 PrintError(exception);
@@ -318,6 +330,9 @@ internal static class ExerciserApp
         Unsupported on the 187. No operation resets calibration constants.
         Numeric values and units match the display exactly; no SI conversion.
         Reading timestamps use the PC's local clock (HH:mm:ss), not the meter's clock.
+        Menu 13 synchronizes the meter clock through extended QS/PS commands after typed SYNC.
+        It measures latency, compensates timed minute-boundary writes, and verifies counter readback.
+        Clock synchronization usually takes 3-4 minutes. Keep the optical link stable and do not operate the meter.
         Ctrl+C exits (130); EOF exits without sending the pending command.
         Exit codes: 0 success, 1 operation/test/native-load failure, 2 invalid CLI input.
         """);

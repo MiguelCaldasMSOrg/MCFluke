@@ -10,6 +10,8 @@ public sealed class FlukeDevice : IDisposable
     public const int MaximumTimeoutMilliseconds = 60000;
     public const int DefaultTimeoutMilliseconds = 2000;
     public const string SimulatorPort = "sim://187";
+    public const uint ClockTicksPerSecond = 10;
+    public const uint ClockTicksPerDay = 864000;
 
     private readonly object gate = new();
     private readonly SafeDeviceHandle handle;
@@ -108,6 +110,39 @@ public sealed class FlukeDevice : IDisposable
             int result = NativeMethods.ReadDisplay(handle, out NativeReading reading, out NativeError error);
             NativeResult.ThrowIfFailed(result, error, "read display");
             return reading.ToManaged();
+        }
+    }
+
+    /// <summary>Reads the running unsigned decisecond counter through the extended 18x QS command.</summary>
+    public uint ReadClockCounter()
+    {
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            int result = NativeMethods.GetClock(handle, out uint counter, out NativeError error);
+            NativeResult.ThrowIfFailed(result, error, "read clock counter (QS)");
+            return counter;
+        }
+    }
+
+    /// <summary>
+    /// Sets local time-of-day at 0.1-second resolution, preserving all other
+    /// settings and the nearest representable counter day. Returns the counter
+    /// value sent. The bounded call includes a fresh QS read before the PS write.
+    /// </summary>
+    public uint SetClock(TimeOnly timeOfDay)
+    {
+        if (timeOfDay.Ticks % (TimeSpan.TicksPerSecond / ClockTicksPerSecond) != 0)
+            throw new ArgumentOutOfRangeException(nameof(timeOfDay), "The clock resolution is 0.1 second.");
+        lock (gate)
+        {
+            ThrowIfDisposed();
+            uint ticks = (uint)(timeOfDay.Ticks / (TimeSpan.TicksPerSecond / ClockTicksPerSecond));
+            int result = NativeMethods.SetClock(handle, ticks, out uint written, out NativeError error);
+            NativeResult.ThrowIfFailed(result, error, "set clock (QS/PS)");
+            if (written % ClockTicksPerDay != ticks)
+                throw new FlukeProtocolException(0, "set clock", "Native returned a different time-of-day than requested.");
+            return written;
         }
     }
 

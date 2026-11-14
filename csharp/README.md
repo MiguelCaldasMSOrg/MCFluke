@@ -65,6 +65,13 @@ the reading is printed. They do not come from the Fluke. Numeric values use
 concise invariant formatting rather than forced 17-digit output; `Display`
 still preserves every character sent by the meter, including trailing zeros.
 
+Menu **13** offers clock synchronization after typed **SYNC**. It measures
+command round trips, schedules three minute-boundary settings (a fourth if
+needed), and corrects launch timing using decisecond clock readbacks. Allow
+about 3-4 minutes with the optical head fixed. This is an experimental
+community-evidenced QS/PS feature, not a manufacturer-certified timing
+operation; [details and uncertainty](../docs/clock-sync.md) are documented.
+
 Without `--count`, the interactive menu exposes **all** capabilities: identity,
 single/repeated display reads, every valid SF key, default setup, RI reset,
 timeout get/set, both parsers, version, ABI, and status messages. No control
@@ -118,6 +125,13 @@ holds a safe reference during calls. Operations after disposal throw
 checked before passing any fixed native structure. Native enums/statuses use
 signed 32-bit integers; timeout/ABI use unsigned 32-bit integers; all calls are
 Cdecl with bounded fixed-byte structures matching the C header.
+
+`ReadClockCounter()` returns the full unsigned decisecond counter.
+`SetClock(TimeOnly)` accepts exact 0.1-second increments, reads fresh settings
+and changes only the clock field, preserving the nearest counter day. It
+returns the raw counter written. This immediate setter is distinct from
+menu 13's measured, minute-boundary workflow. Its QS read and PS write share
+one native operation timeout. Existing methods/signatures are unchanged.
 
 Failures are typed `FlukeException` subclasses for all ten native error statuses
 (including timeout, I/O, protocol, wrong model, unsupported, command rejection,

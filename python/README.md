@@ -19,8 +19,8 @@ flush every output line immediately, including when stdout is piped.
 For a real connected meter, explicitly select its port, for example
 `python -m mcfluke --port COM3`. The default is COM3.
 The example gets identity once, then prints the unmodified primary display,
-unit, state and value **every two seconds**. It sends no button, default-setup or
-reset commands. `--count N` bounds readings (zero means identity only);
+unit, state and value **every two seconds**. It sends no button, default-setup,
+reset or clock commands. `--count N` bounds readings (zero means identity only);
 `--interval SECONDS` is useful for tests. `--timeout MS` defaults to 1500.
 Ctrl-C closes the connection and exits 130; native/load failures print a useful
 diagnostic and exit 1. No automatic reconnect or simulator fallback is performed.
@@ -62,6 +62,8 @@ Device methods:
 | Method | Meaning |
 |---|---|
 | `get_identity()` / `read_display()` | Read identity / primary display |
+| `read_clock_counter()` | Raw unsigned 32-bit clock counter, in deciseconds |
+| `set_clock(time_of_day_ticks)` | Set integer ticks since midnight; return the actual written raw counter |
 | `get_timeout()` / `set_timeout(ms)` | Read/change native timeout (50..60000 ms) |
 | `press_button(Button.RANGE)` | Native SF button command |
 | `press_button(Button.CALIBRATION, confirm_calibration=True)` | Explicitly enter calibration workflow; does not calibrate |
@@ -92,6 +94,33 @@ All device calls, including close, are serialized by a per-instance reentrant
 lock. Separate devices can operate independently. The context manager is the
 preferred deterministic lifetime; a non-self-retaining finalizer is a fallback.
 
+## Experimental clock support
+
+Clock access uses the community-documented extended 18x **QS/PS** protocol.
+This feature is **experimental, not manufacturer-certified**. It requires the
+clock-capable native library (additive exports within ABI 1).
+
+`read_clock_counter()` returns an integer in `0..4294967295`: a running raw
+unsigned 32-bit **decisecond counter**, not Unix/UTC time or a date/epoch.
+`CLOCK_TICKS_PER_SECOND` is 10 and `CLOCK_TICKS_PER_DAY` is 864000.
+`set_clock(time_of_day_ticks)` accepts only integer `0..863999` ticks since
+midnight. Booleans, strings, fractional seconds/ticks and out-of-range values
+are rejected, without rounding or wrapping. No automatic timezone conversion
+or synchronization occurs.
+
+The setter delegates to the native core: it reads the current 29-byte settings
+block using a **fresh QS**, changes only the four clock bytes, and writes via PS.
+The entire QS-read/PS-write operation shares **one native timeout/deadline**;
+the timeout is not renewed for each transaction. All non-clock settings are
+preserved. The core chooses the closest representable
+day to the existing raw counter, including natural midnight rollover. The
+returned integer is the **exact raw counter written after acknowledgement**,
+which can differ from the input by whole days; it is not a later readback.
+Readback can advance because the clock continues to run, and the raw uint32
+counter eventually wraps. Both operations share the existing per-device lock,
+disposal guards and structured error handling. Clock operations never run
+implicitly in the examples.
+
 ## Offline tests
 
 From `python`, with `PYTHONPATH` set as above:
@@ -103,7 +132,8 @@ python -m unittest discover -s tests -v
 These tests never open a real serial port: integration tests use `sim://187`
 and explicitly fail with native-build instructions if the native library is
 missing. Binding-only tests (ABI declarations, error conversion, concurrency,
-finalization, disposal and read-only example behavior) need no native build:
+finalization, disposal, clock validation/errors and read-only example behavior)
+need no native build:
 
 ```powershell
 python -m unittest discover -s tests -p test_binding.py -v

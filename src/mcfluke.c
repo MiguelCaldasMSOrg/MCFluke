@@ -255,19 +255,17 @@ static mcfluke_status read_line(mcfluke_device *device, char *line,
     }
 }
 
-static mcfluke_status transact(mcfluke_device *device, const char *command,
-    char *payload, size_t capacity, mcfluke_error *error)
+static mcfluke_status begin_command(mcfluke_device *device, const char *command,
+    size_t command_size, uint64_t deadline, mcfluke_error *error)
 {
     mcfluke_status status;
     char ack[8];
-    uint64_t deadline;
     mcfluke_clear_error(error);
     if (!device)
         return mcfluke_fail(error, MCFLUKE_INVALID_ARGUMENT, 0, "An open device is required.");
-    deadline = mcfluke_now_ms() + device->timeout_ms;
     status = mcfluke_transport_flush(&device->transport, error);
     if (status != MCFLUKE_OK) return status;
-    status = mcfluke_transport_write(&device->transport, command, strlen(command),
+    status = mcfluke_transport_write(&device->transport, command, command_size,
         remaining_ms(deadline), error);
     if (status != MCFLUKE_OK) return status;
     status = read_line(device, ack, sizeof(ack), deadline, error);
@@ -276,7 +274,44 @@ static mcfluke_status transact(mcfluke_device *device, const char *command,
         return mcfluke_fail(error, MCFLUKE_COMMAND_REJECTED, 0, mcfluke_status_message(MCFLUKE_COMMAND_REJECTED));
     if (strcmp(ack, "0") != 0)
         return mcfluke_fail(error, MCFLUKE_PROTOCOL_ERROR, 0, "Expected a single 0 or 1 command acknowledgement.");
+    return MCFLUKE_OK;
+}
+
+static mcfluke_status transact(mcfluke_device *device, const char *command,
+    char *payload, size_t capacity, mcfluke_error *error)
+{
+    uint64_t deadline = device ? mcfluke_now_ms() + device->timeout_ms : 0;
+    mcfluke_status status = begin_command(device, command, strlen(command), deadline, error);
+    if (status != MCFLUKE_OK) return status;
     return payload ? read_line(device, payload, capacity, deadline, error) : MCFLUKE_OK;
+}
+
+static mcfluke_status read_settings(mcfluke_device *device, unsigned char settings[29],
+    uint64_t deadline, mcfluke_error *error)
+{
+    static const char prefix[] = "QS,";
+    mcfluke_status status = begin_command(device, "QS\r", 3, deadline, error);
+    size_t i;
+    if (status != MCFLUKE_OK) return status;
+    for (i = 0; i < 32; ++i) {
+        unsigned char byte;
+        uint32_t remaining = remaining_ms(deadline);
+        if (!remaining)
+            return mcfluke_fail(error, MCFLUKE_TIMEOUT, 0, "The binary QS settings response timed out.");
+        status = mcfluke_transport_read_byte(&device->transport, &byte, remaining, error);
+        if (status != MCFLUKE_OK) return status;
+        if (i < 3) {
+            if (byte != (unsigned char)prefix[i])
+                return mcfluke_fail(error, MCFLUKE_PROTOCOL_ERROR, 0, "Expected the binary QS, settings header.");
+        } else settings[i - 3] = byte;
+    }
+    return MCFLUKE_OK;
+}
+
+static uint32_t clock_counter(const unsigned char settings[29])
+{
+    return (uint32_t)settings[12] | ((uint32_t)settings[13] << 8) |
+        ((uint32_t)settings[14] << 16) | ((uint32_t)settings[15] << 24);
 }
 
 mcfluke_status mcfluke_get_identity(mcfluke_device *device,
@@ -343,6 +378,60 @@ mcfluke_status mcfluke_read_display(mcfluke_device *device,
     status = transact(device, "QM\r", payload, sizeof(payload), error);
     if (status != MCFLUKE_OK) return status;
     return mcfluke_parse_display(payload, reading, error);
+}
+
+mcfluke_status mcfluke_get_clock(mcfluke_device *device,
+    uint32_t *counter, mcfluke_error *error)
+{
+    unsigned char settings[29];
+    mcfluke_status status;
+    mcfluke_clear_error(error);
+    if (counter) *counter = 0;
+    if (!device || !counter)
+        return mcfluke_fail(error, MCFLUKE_INVALID_ARGUMENT, 0, "Device and clock-counter output are required.");
+    status = read_settings(device, settings, mcfluke_now_ms() + device->timeout_ms, error);
+    if (status != MCFLUKE_OK) return status;
+    *counter = clock_counter(settings);
+    return MCFLUKE_OK;
+}
+
+mcfluke_status mcfluke_set_clock(mcfluke_device *device, uint32_t time_of_day_ticks,
+    uint32_t *written_counter, mcfluke_error *error)
+{
+    unsigned char settings[29], command[33];
+    static const int offsets[] = {0, -1, 1};
+    uint64_t deadline;
+    uint32_t current, target;
+    int64_t day, best = -1, best_distance = INT64_MAX;
+    size_t i;
+    mcfluke_status status;
+    mcfluke_clear_error(error);
+    if (written_counter) *written_counter = 0;
+    if (!device || time_of_day_ticks >= MCFLUKE_CLOCK_TICKS_PER_DAY)
+        return mcfluke_fail(error, MCFLUKE_INVALID_ARGUMENT, 0,
+            "Device and time-of-day in 0..863999 deciseconds are required.");
+    deadline = mcfluke_now_ms() + device->timeout_ms;
+    status = read_settings(device, settings, deadline, error);
+    if (status != MCFLUKE_OK) return status;
+    current = clock_counter(settings);
+    day = (int64_t)(current / MCFLUKE_CLOCK_TICKS_PER_DAY) * MCFLUKE_CLOCK_TICKS_PER_DAY;
+    for (i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i) {
+        int64_t candidate = day + (int64_t)offsets[i] * MCFLUKE_CLOCK_TICKS_PER_DAY + time_of_day_ticks;
+        int64_t distance;
+        if (candidate < 0 || candidate > UINT32_MAX) continue;
+        distance = llabs(candidate - (int64_t)current);
+        if (distance < best_distance) { best = candidate; best_distance = distance; }
+    }
+    if (best < 0)
+        return mcfluke_fail(error, MCFLUKE_PROTOCOL_ERROR, 0, "The target clock counter cannot be represented.");
+    target = (uint32_t)best;
+    memcpy(command, "PS ", 3);
+    memcpy(command + 3, settings, sizeof(settings));
+    for (i = 0; i < 4; ++i) command[3 + 12 + i] = (unsigned char)(target >> (8 * i));
+    command[32] = '\r';
+    status = begin_command(device, (const char *)command, sizeof(command), deadline, error);
+    if (status == MCFLUKE_OK && written_counter) *written_counter = target;
+    return status;
 }
 
 mcfluke_status mcfluke_get_timeout(mcfluke_device *device,

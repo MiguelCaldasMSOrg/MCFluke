@@ -11,6 +11,10 @@ from . import _native
 from ._native import DllNotFoundError, NativeABIError
 
 
+CLOCK_TICKS_PER_SECOND = 10
+CLOCK_TICKS_PER_DAY = 864000
+
+
 class Status(IntEnum):
     OK = 0
     INVALID_ARGUMENT = 1
@@ -258,6 +262,19 @@ class MCFluke:
         self._call("read_display", C.byref(result))
         return _reading(result)
 
+    def read_clock_counter(self):
+        """Return the raw unsigned 32-bit decisecond counter, not an epoch."""
+        result = C.c_uint32()
+        self._call("get_clock", C.byref(result))
+        return result.value
+
+    def set_clock(self, time_of_day_ticks):
+        """Set integer ticks since midnight; return the exact written raw counter."""
+        ticks = _integer(time_of_day_ticks, "time_of_day_ticks", 0, CLOCK_TICKS_PER_DAY - 1)
+        result = C.c_uint32()
+        self._call("set_clock", ticks, C.byref(result))
+        return result.value
+
     def get_timeout(self):
         result = C.c_uint32()
         self._call("get_timeout", C.byref(result))
@@ -328,6 +345,7 @@ def status_message(status, *, library_path=None):
 
 __all__ = [
     "MCFluke", "Identity", "Reading", "Version", "Button", "Status", "ReadingState",
+    "CLOCK_TICKS_PER_SECOND", "CLOCK_TICKS_PER_DAY",
     "parse_identity", "parse_display", "get_version", "status_message",
     "DllNotFoundError", "NativeABIError", "MCFlukeError", "InvalidArgumentError",
     "DeviceIOError", "DeviceTimeoutError", "ProtocolError", "CommandRejectedError",

@@ -16,6 +16,8 @@ export const Button = Object.freeze({
 });
 
 export const ReadingState = Object.freeze({ VALUE: 0, OUT_OF_RANGE: 1, TEXT: 2 });
+export const CLOCK_TICKS_PER_SECOND = 10;
+export const CLOCK_TICKS_PER_DAY = 864000;
 
 export class MCFlukeError extends Error {
   constructor(message, { status, osCode = 0, operation, stderr = '' } = {}) {
@@ -136,6 +138,13 @@ function version(value) {
 function timeoutResult(value) {
   if (!Number.isInteger(value) || value < 50 || value > 60000) {
     throw new ProtocolError('Malformed timeout result');
+  }
+  return value;
+}
+
+function clockCounterResult(value) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 4294967295) {
+    throw new ProtocolError('Malformed clock counter result (expected unsigned 32-bit integer)');
   }
   return value;
 }
@@ -363,10 +372,12 @@ export class MCFluke {
     const id = this._nextId++;
     return new Promise((resolve, reject) => {
       // Recomputed when each serialized operation starts, including after setTimeout.
+      // Conservative bridge watchdog; native QS + PS still share one deadline.
+      const timeoutMultiplier = verb === 'set-clock' ? 4 : 2;
       const timer = setTimeout(() => this._fatal(new BridgeError(
         `${verb}: native host exceeded its response deadline (native timeout ${this._timeout} ms)`,
         { operation: verb, stderr: this.diagnostics },
-      )), this._timeout * 2 + 1000);
+      )), this._timeout * timeoutMultiplier + 1000);
       this._pending.set(id, { resolve, reject, timer, verb, validate });
       this._child.stdin.write(`${id}\t${verb}\t${argument}\n`, 'utf8', (error) => {
         if (error) this._fatal(new BridgeError(`Cannot write to native host: ${error.message}`));
@@ -388,6 +399,11 @@ export class MCFluke {
 
   async getIdentity() { return this._enqueue('id', '', identity); }
   async readDisplay() { return this._enqueue('display', '', reading); }
+  async readClockCounter() { return this._enqueue('clock', '', clockCounterResult); }
+  async setClock(timeOfDayTicks) {
+    const ticks = integer(timeOfDayTicks, 'timeOfDayTicks', 0, CLOCK_TICKS_PER_DAY - 1);
+    return this._enqueue('set-clock', String(ticks), clockCounterResult);
+  }
   async pressButton(button, { confirmCalibration = false } = {}) {
     return this._enqueue('button', `${integer(button, 'button')} ${confirmation(confirmCalibration, 'confirmCalibration')}`);
   }

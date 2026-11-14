@@ -6,7 +6,7 @@ import test, { before } from 'node:test';
 import {
   MCFluke, MCFlukeError, HostNotFoundError, Button, ReadingState,
   ConfirmationRequiredError, UnsupportedOperationError, InvalidArgumentError,
-  DeviceClosedError, resolveHostPath,
+  DeviceClosedError, resolveHostPath, CLOCK_TICKS_PER_DAY,
 } from '../src/index.js';
 
 before(() => {
@@ -90,6 +90,33 @@ test('native operations queue in order and dispose idempotently', async (t) => {
   await meter.close();
   await meter.close();
   await assert.rejects(meter.readDisplay(), DeviceClosedError);
+});
+
+test('native clock set returns written raw counter with running uint32 readback', async (t) => {
+  const meter = await simulator(t);
+  const initial = await meter.readClockCounter();
+  assert.ok(Number.isSafeInteger(initial) && initial >= 0 && initial <= 4294967295);
+  for (const ticks of [123456, 863999, 0]) {
+    const written = await meter.setClock(ticks);
+    assert.ok(Number.isSafeInteger(written) && written >= 0 && written <= 4294967295);
+    assert.equal(written % CLOCK_TICKS_PER_DAY, ticks);
+    const readback = await meter.readClockCounter();
+    assert.ok(Number.isSafeInteger(readback) && readback >= 0 && readback <= 4294967295);
+    const unsignedDelta = (readback - written + 4294967296) % 4294967296;
+    assert.ok(unsignedDelta < 10, `clock advanced ${unsignedDelta} ticks`);
+  }
+  assert.equal((await meter.getIdentity()).model, 'FLUKE 187');
+  assert.equal((await meter.readDisplay()).display, '+1.234 V DC');
+  await meter.close();
+  await assert.rejects(meter.readClockCounter(), DeviceClosedError);
+  await assert.rejects(meter.setClock(0), DeviceClosedError);
+});
+
+test('native simulator reset restarts its running clock', async (t) => {
+  const meter = await simulator(t);
+  await meter.setClock(432000);
+  await meter.resetInstrument({ confirmation: true });
+  assert.ok(await meter.readClockCounter() < 10);
 });
 
 test('bounded read-only example uses the actual native simulator', async () => {

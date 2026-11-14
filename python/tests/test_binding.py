@@ -31,6 +31,9 @@ class FakeDLL:
         self.timeout = 1500
         self.open_status = 0
         self.display_status = 0
+        self.clock_status = 0
+        self.clock_counter = 4294967295
+        self.written_counter = 3 * m.CLOCK_TICKS_PER_DAY + 12345
         self.error_message = b"fixture diagnostic"
         self.read_entered = threading.Event()
         self.read_release = None
@@ -43,6 +46,8 @@ class FakeDLL:
             "close": self.close,
             "get_identity": self.get_identity,
             "read_display": self.read_display,
+            "get_clock": self.get_clock,
+            "set_clock": self.set_clock,
             "get_timeout": self.get_timeout,
             "set_timeout": self.set_timeout,
             "press_button": self.press_button,
@@ -95,6 +100,20 @@ class FakeDLL:
         C.cast(output, C.POINTER(C.c_uint32)).contents.value = self.timeout
         return 0
 
+    def get_clock(self, handle, output, error):
+        self.calls.append(("clock",))
+        if self.clock_status:
+            return self.failure(self.clock_status, error)
+        C.cast(output, C.POINTER(C.c_uint32)).contents.value = self.clock_counter
+        return 0
+
+    def set_clock(self, handle, ticks, output, error):
+        self.calls.append(("set-clock", ticks))
+        if self.clock_status:
+            return self.failure(self.clock_status, error)
+        C.cast(output, C.POINTER(C.c_uint32)).contents.value = self.written_counter
+        return 0
+
     def set_timeout(self, handle, timeout, error):
         self.calls.append(("set-timeout", timeout))
         self.timeout = timeout
@@ -129,6 +148,14 @@ class ABITests(unittest.TestCase):
         self.assertEqual(library.mcfluke_get_timeout.argtypes, [
             _native.Handle, C.POINTER(C.c_uint32), C.POINTER(_native.Error)
         ])
+        self.assertEqual(library.mcfluke_get_clock.argtypes, [
+            _native.Handle, C.POINTER(C.c_uint32), C.POINTER(_native.Error)
+        ])
+        self.assertEqual(library.mcfluke_set_clock.argtypes, [
+            _native.Handle, C.c_uint32, C.POINTER(C.c_uint32), C.POINTER(_native.Error)
+        ])
+        self.assertIs(library.mcfluke_get_clock.restype, C.c_int32)
+        self.assertIs(library.mcfluke_set_clock.restype, C.c_int32)
         self.assertIs(library.mcfluke_read_display.restype, C.c_int32)
         self.assertEqual(library.mcfluke_read_display.argtypes, [
             _native.Handle, C.POINTER(_native.Reading), C.POINTER(_native.Error)
@@ -161,6 +188,14 @@ class ABITests(unittest.TestCase):
             [sys.executable, "-c", script], capture_output=True, text=True, timeout=10
         )
         self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_missing_additive_clock_exports_are_reported(self):
+        for symbol in ("mcfluke_get_clock", "mcfluke_set_clock"):
+            with self.subTest(symbol=symbol):
+                dll = FakeDLL()
+                delattr(dll, symbol)
+                with self.assertRaisesRegex(m.NativeABIError, symbol):
+                    _native.Library(dll)
 
     def test_explicit_missing_or_relative_library_does_not_fall_back(self):
         with patch.object(_native.C, "CDLL") as loader:
@@ -223,6 +258,55 @@ class BindingTests(unittest.TestCase):
         with self.assertRaises(m.ProtocolError):
             m._reading(_native.Reading(state=999))
 
+    def test_clock_uint32_results_and_exact_integer_inputs(self):
+        self.assertEqual(m.CLOCK_TICKS_PER_SECOND, 10)
+        self.assertEqual(m.CLOCK_TICKS_PER_DAY, 864000)
+        with m.MCFluke("sim://187") as meter:
+            for counter in (0, 2147483648, 4294967295):
+                with self.subTest(counter=counter):
+                    self.dll.clock_counter = counter
+                    result = meter.read_clock_counter()
+                    self.assertIs(type(result), int)
+                    self.assertEqual(result, counter)
+            for ticks in (0, 12345, 863999):
+                with self.subTest(ticks=ticks):
+                    self.dll.written_counter = 3 * m.CLOCK_TICKS_PER_DAY + ticks
+                    self.assertEqual(meter.set_clock(ticks), self.dll.written_counter)
+                    self.assertEqual(self.dll.calls[-1], ("set-clock", ticks))
+            self.dll.written_counter = 4294967295
+            self.assertEqual(meter.set_clock(0), 4294967295)
+
+    def test_invalid_clock_inputs_never_reach_native_code(self):
+        with m.MCFluke("sim://187") as meter:
+            calls_before = list(self.dll.calls)
+            for ticks in (-1, 864000, 2**32, True, False, 0.1, 1.0, "10", None,
+                          float("nan"), float("inf"), [], {}):
+                with self.subTest(ticks=ticks):
+                    with self.assertRaises(m.InvalidArgumentError):
+                        meter.set_clock(ticks)
+            self.assertEqual(self.dll.calls, calls_before)
+
+    def test_clock_structured_errors_do_not_return_success_shaped_counters(self):
+        with m.MCFluke("sim://187") as meter:
+            for operation, call in (
+                ("get_clock", meter.read_clock_counter),
+                ("set_clock", lambda: meter.set_clock(12345)),
+            ):
+                for status, exception in (
+                    (2, m.DeviceIOError), (3, m.DeviceTimeoutError),
+                    (4, m.ProtocolError), (5, m.CommandRejectedError),
+                ):
+                    with self.subTest(operation=operation, status=status):
+                        self.dll.clock_status = status
+                        with self.assertRaises(exception) as caught:
+                            call()
+                        self.assertEqual(caught.exception.status, status)
+                        self.assertEqual(caught.exception.os_code, 1460)
+                        self.assertEqual(caught.exception.operation, operation)
+                        self.assertIn("fixture diagnostic", str(caught.exception))
+            self.dll.clock_status = 0
+            self.assertEqual(meter.read_clock_counter(), self.dll.clock_counter)
+
     def test_structured_timeout_and_other_errors(self):
         with m.MCFluke("sim://187") as meter:
             for status, exception in (
@@ -275,6 +359,7 @@ class BindingTests(unittest.TestCase):
         meter.close()
         operations = (
             meter.get_identity, meter.read_display, meter.get_timeout,
+            meter.read_clock_counter, lambda: meter.set_clock(12345),
             lambda: meter.set_timeout(1500), lambda: meter.press_button(m.Button.RANGE),
             meter.default_setup, meter.reset_instrument, meter.__enter__,
         )
@@ -324,6 +409,59 @@ class BindingTests(unittest.TestCase):
         self.assertFalse(closer.is_alive())
         self.assertEqual(failures, [])
         self.assertEqual(self.dll.calls[-1], ("close",))
+
+    def test_clock_calls_share_the_gate_with_display_and_close(self):
+        for name, operation in (
+            ("get_clock", lambda meter: meter.read_clock_counter()),
+            ("set_clock", lambda meter: meter.set_clock(12345)),
+        ):
+            with self.subTest(operation=name):
+                entered = threading.Event()
+                release = threading.Event()
+                attempted_display = threading.Event()
+                attempted_close = threading.Event()
+                failures = []
+                with m.MCFluke("sim://187") as meter:
+                    original = getattr(self.library, f"mcfluke_{name}")
+
+                    def blocked(*arguments):
+                        entered.set()
+                        if not release.wait(3):
+                            raise AssertionError("test failed to release blocked clock call")
+                        return original(*arguments)
+
+                    def invoke(call, attempted=None):
+                        try:
+                            if attempted is not None:
+                                attempted.set()
+                            call()
+                        except m.DeviceClosedError:
+                            if attempted is not attempted_display:
+                                failures.append(AssertionError("clock call unexpectedly closed"))
+                        except BaseException as exc:
+                            failures.append(exc)
+
+                    with patch.object(self.library, f"mcfluke_{name}", side_effect=blocked):
+                        reader = threading.Thread(target=invoke, args=(lambda: operation(meter),))
+                        display = threading.Thread(target=invoke, args=(meter.read_display, attempted_display))
+                        closer = threading.Thread(target=invoke, args=(meter.close, attempted_close))
+                        reader.start()
+                        try:
+                            self.assertTrue(entered.wait(1))
+                            calls_before = list(self.dll.calls)
+                            display.start()
+                            closer.start()
+                            self.assertTrue(attempted_display.wait(1))
+                            self.assertTrue(attempted_close.wait(1))
+                            self.assertEqual(self.dll.calls, calls_before)
+                        finally:
+                            release.set()
+                            for thread in (reader, display, closer):
+                                if thread.ident is not None:
+                                    thread.join(3)
+                        self.assertFalse(any(thread.is_alive() for thread in (reader, display, closer)))
+                        self.assertEqual(failures, [])
+                        self.assertTrue(meter.closed)
 
     def test_example_only_identifies_and_reads_with_two_second_default(self):
         output = io.StringIO()

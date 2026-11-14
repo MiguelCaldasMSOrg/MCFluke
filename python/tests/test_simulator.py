@@ -87,6 +87,36 @@ class NativeSimulatorTests(unittest.TestCase):
                 first.read_display()
             self.assertEqual(second.get_identity().model, "FLUKE 187")
 
+    def test_clock_set_and_running_unsigned_readback(self):
+        with m.MCFluke("sim://187") as meter:
+            initial = meter.read_clock_counter()
+            self.assertIs(type(initial), int)
+            self.assertGreaterEqual(initial, 0)
+            self.assertLessEqual(initial, 4294967295)
+            for ticks in (123456, 863999, 0):
+                with self.subTest(ticks=ticks):
+                    written = meter.set_clock(ticks)
+                    self.assertIs(type(written), int)
+                    self.assertGreaterEqual(written, 0)
+                    self.assertLessEqual(written, 4294967295)
+                    self.assertEqual(written % m.CLOCK_TICKS_PER_DAY, ticks)
+                    readback = meter.read_clock_counter()
+                    self.assertGreaterEqual(readback, 0)
+                    self.assertLessEqual(readback, 4294967295)
+                    self.assertLess((readback - written) & 0xFFFFFFFF, 10)
+            self.assertEqual(meter.get_identity().model, "FLUKE 187")
+            self.assertEqual(meter.read_display().display, "+1.234 V DC")
+        with self.assertRaises(m.DeviceClosedError):
+            meter.read_clock_counter()
+        with self.assertRaises(m.DeviceClosedError):
+            meter.set_clock(0)
+
+    def test_simulator_reset_restarts_running_clock(self):
+        with m.MCFluke("sim://187") as meter:
+            meter.set_clock(432000)
+            meter.reset_instrument(confirmation=True)
+            self.assertLess(meter.read_clock_counter(), 10)
+
     def test_bounded_read_only_example(self):
         example = Path(__file__).resolve().parents[1] / "examples" / "read_display.py"
         for entrypoint in (["-m", "mcfluke"], [str(example)]):

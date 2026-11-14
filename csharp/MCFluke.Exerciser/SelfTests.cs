@@ -33,6 +33,8 @@ internal static class SelfTests
         Run("managed argument guards (no native calls)", TestManagedGuards);
         Run("typed exception mappings preserve structured details", TestExceptionMappings);
         Run("mismatched and unknown structured statuses are protocol errors", TestMalformedErrors);
+        foreach (var test in ClockSynchronizationTests.Cases())
+            Run(test.Name, test.Test);
 
         try
         {
@@ -140,6 +142,17 @@ internal static class SelfTests
             Equal("+1.234 V DC", reading.Display);
             Equal("V DC", reading.Unit);
             Equal(FlukeDevice.DefaultTimeoutMilliseconds, device.TimeoutMilliseconds);
+        });
+        Run("extended clock read/set and exact decisecond validation", () =>
+        {
+            using FlukeDevice device = OpenSimulator();
+            uint before = device.ReadClockCounter();
+            uint written = device.SetClock(new TimeOnly(12, 34, 0));
+            Equal(452400u, written % FlukeDevice.ClockTicksPerDay);
+            uint after = device.ReadClockCounter();
+            Require(unchecked(after - written) < 100, "Simulator clock readback is inconsistent.");
+            Throws<ArgumentOutOfRangeException>(() => device.SetClock(new TimeOnly(0).Add(TimeSpan.FromTicks(1))));
+            Require(before < 100, "Initial simulator clock unexpectedly far from its start.");
         });
         Run("calibration and reset confirmations are separate and enforced natively", () =>
         {
@@ -412,6 +425,8 @@ internal static class SelfTests
         Require(device.IsDisposed, "Disposed state was not reported.");
         Throws<ObjectDisposedException>(() => _ = device.Identity);
         Throws<ObjectDisposedException>(() => device.ReadDisplay());
+        Throws<ObjectDisposedException>(() => device.ReadClockCounter());
+        Throws<ObjectDisposedException>(() => device.SetClock(new TimeOnly(12, 0)));
         Throws<ObjectDisposedException>(() => _ = device.TimeoutMilliseconds);
         Throws<ObjectDisposedException>(() => device.TimeoutMilliseconds = 100);
         Throws<ObjectDisposedException>(() => device.PressButton(FlukeButton.Hold));
@@ -500,7 +515,7 @@ internal static class SelfTests
         Require(!string.IsNullOrWhiteSpace(exception.Operation), "Missing operation context.");
     }
 
-    private static TException Throws<TException>(Action action) where TException : Exception
+    internal static TException Throws<TException>(Action action) where TException : Exception
     {
         try
         {
@@ -516,7 +531,7 @@ internal static class SelfTests
     private static void Offset<T>(string field, int expected) where T : struct
         => Equal(new IntPtr(expected), Marshal.OffsetOf<T>(field));
 
-    private static void Equal<T>(T expected, T actual)
+    internal static void Equal<T>(T expected, T actual)
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
         {
@@ -528,7 +543,7 @@ internal static class SelfTests
         => Require(Math.Abs(expected - actual) <= Math.Max(1, Math.Abs(expected)) * 1e-12,
             $"Expected {expected:G17}, got {actual:G17}.");
 
-    private static void Require(bool condition, string message)
+    internal static void Require(bool condition, string message)
     {
         if (!condition)
         {

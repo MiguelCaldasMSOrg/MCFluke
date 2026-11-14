@@ -4,6 +4,7 @@ import ctypes
 import os
 from pathlib import Path
 import select
+import struct
 import sys
 import threading
 import time
@@ -49,6 +50,14 @@ class SerialTests(unittest.TestCase):
             ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(Error)
         ]
         self.lib.mcfluke_set_timeout.restype = ctypes.c_int
+        self.lib.mcfluke_get_clock.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(Error)
+        ]
+        self.lib.mcfluke_get_clock.restype = ctypes.c_int
+        self.lib.mcfluke_set_clock.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(Error)
+        ]
+        self.lib.mcfluke_set_clock.restype = ctypes.c_int
         self.master, self.slave = pty.openpty()
         self.port = os.ttyname(self.slave).encode()
         self.stop = threading.Event()
@@ -56,6 +65,9 @@ class SerialTests(unittest.TestCase):
         self.identity = b"0\rFLUKE 187,V2.02,PTY-TEST\r"
         self.delay = 0.001
         self.chunk_size = 4
+        self.settings = bytearray(range(29))
+        self.settings[2:4] = b"\r\x00"
+        self.settings[12:16] = struct.pack("<I", 0x000D0001)
         self.commands = []
         self.thread = threading.Thread(target=self.emulate, daemon=True)
         self.thread.start()
@@ -76,10 +88,22 @@ class SerialTests(unittest.TestCase):
             if not select.select([self.master], [], [], 0.05)[0]:
                 continue
             pending += os.read(self.master, 256)
-            while b"\r" in pending:
-                command, pending = pending.split(b"\r", 1)
+            while pending:
+                if pending.startswith(b"PS "):
+                    if len(pending) < 33:
+                        break
+                    packet, pending = pending[:33], pending[33:]
+                    command = packet[:-1]
+                    self.settings[:] = packet[3:32]
+                    response = b"0\r" if packet[-1:] == b"\r" else b"1\r"
+                else:
+                    if b"\r" not in pending:
+                        break
+                    command, pending = pending.split(b"\r", 1)
+                    response = self.identity if command == b"ID" else (
+                        b"0\rQS," + bytes(self.settings) if command == b"QS" else self.reply
+                    )
                 self.commands.append(command)
-                response = self.identity if command == b"ID" else self.reply
                 for position in range(0, len(response), self.chunk_size):
                     if self.stop.wait(self.delay):
                         return
@@ -138,6 +162,22 @@ class SerialTests(unittest.TestCase):
         start = time.monotonic()
         self.assertEqual(self.lib.mcfluke_read_display(self.device, ctypes.byref(reading), ctypes.byref(self.error)), 3)
         self.assertLess(time.monotonic() - start, 0.4)
+
+    def test_binary_clock_read_modify_write_preserves_settings(self):
+        self.connect()
+        counter = ctypes.c_uint32()
+        self.assertEqual(self.lib.mcfluke_get_clock(self.device, ctypes.byref(counter), ctypes.byref(self.error)), 0)
+        self.assertEqual(counter.value, 0x000D0001)
+        original = bytes(self.settings)
+        written = ctypes.c_uint32()
+        self.assertEqual(self.lib.mcfluke_set_clock(
+            self.device, 432000, ctypes.byref(written), ctypes.byref(self.error)), 0)
+        self.assertEqual(written.value % 864000, 432000)
+        self.assertEqual(self.settings[:12], original[:12])
+        self.assertEqual(self.settings[16:], original[16:])
+        self.assertEqual(struct.unpack("<I", self.settings[12:16])[0], written.value)
+        self.assertEqual(self.lib.mcfluke_get_clock(self.device, ctypes.byref(counter), ctypes.byref(self.error)), 0)
+        self.assertEqual(counter.value, written.value)
 
 
 if __name__ == "__main__":

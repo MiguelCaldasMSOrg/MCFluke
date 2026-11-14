@@ -11,6 +11,9 @@ typedef struct {
     int simulated;
     int sim_ac;
     int sim_range;
+    unsigned char sim_settings[29];
+    uint32_t sim_clock_base;
+    uint64_t sim_clock_started;
     char pending[256];
     size_t pending_size;
     size_t pending_position;

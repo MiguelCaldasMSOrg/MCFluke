@@ -245,10 +245,70 @@ static void decimal_conversion(void)
     CHECK(setlocale(LC_NUMERIC, saved_locale) != NULL);
 }
 
+static void clock_commands(void)
+{
+    mcfluke_device *device = NULL;
+    mcfluke_error error;
+    uint32_t counter, written;
+    unsigned char before[29];
+    unsigned count;
+    CHECK(mcfluke_open("test", 1500, &device, &error) == MCFLUKE_OK);
+    if (!device) exit(1);
+    CHECK(mcfluke_get_clock(device, &counter, &error) == MCFLUKE_OK && counter == 0);
+    memcpy(before, fake_settings(), sizeof(before));
+    CHECK(mcfluke_set_clock(device, 123456, &written, &error) == MCFLUKE_OK && written == 123456);
+    CHECK(fake_command_size() == 33);
+    CHECK(memcmp(fake_command(), "PS ", 3) == 0 && fake_command()[32] == '\r');
+    CHECK(memcmp(fake_command() + 3, before, 12) == 0);
+    CHECK(memcmp(fake_command() + 3 + 16, before + 16, 13) == 0);
+    CHECK(mcfluke_get_clock(device, &counter, &error) == MCFLUKE_OK && counter == 123456);
+    fake_clock_counter(MCFLUKE_CLOCK_TICKS_PER_DAY - 1);
+    CHECK(mcfluke_set_clock(device, 0, &written, &error) == MCFLUKE_OK);
+    CHECK(written == MCFLUKE_CLOCK_TICKS_PER_DAY);
+    fake_clock_counter(MCFLUKE_CLOCK_TICKS_PER_DAY + 1);
+    CHECK(mcfluke_set_clock(device, MCFLUKE_CLOCK_TICKS_PER_DAY - 600, &written, &error) == MCFLUKE_OK);
+    CHECK(written == MCFLUKE_CLOCK_TICKS_PER_DAY - 600);
+    fake_clock_counter(UINT32_MAX);
+    CHECK(mcfluke_set_clock(device, 0, &written, &error) == MCFLUKE_OK);
+    CHECK(written % MCFLUKE_CLOCK_TICKS_PER_DAY == 0);
+    count = fake_write_count();
+    CHECK(mcfluke_set_clock(device, MCFLUKE_CLOCK_TICKS_PER_DAY, &written, &error) == MCFLUKE_INVALID_ARGUMENT);
+    CHECK(written == 0 && fake_write_count() == count);
+    CHECK(mcfluke_get_clock(device, NULL, &error) == MCFLUKE_INVALID_ARGUMENT);
+    CHECK(mcfluke_get_clock(NULL, &counter, &error) == MCFLUKE_INVALID_ARGUMENT && counter == 0);
+    CHECK(mcfluke_set_clock(NULL, 0, NULL, &error) == MCFLUKE_INVALID_ARGUMENT);
+    fake_reply("1\r");
+    CHECK(mcfluke_get_clock(device, &counter, &error) == MCFLUKE_COMMAND_REJECTED);
+    {
+        unsigned char response[34] = {'0','\r','Q','X',','};
+        fake_reply_bytes(response, sizeof(response));
+        CHECK(mcfluke_get_clock(device, &counter, &error) == MCFLUKE_PROTOCOL_ERROR);
+        response[3] = 'S';
+        fake_reply_bytes(response, 10);
+        CHECK(mcfluke_get_clock(device, &counter, &error) == MCFLUKE_TIMEOUT);
+    }
+    count = fake_write_count();
+    fake_reply("1\r");
+    CHECK(mcfluke_set_clock(device, 0, &written, &error) == MCFLUKE_COMMAND_REJECTED);
+    CHECK(fake_write_count() == count + 1);
+    fake_program_reply("1\r");
+    count = fake_write_count();
+    CHECK(mcfluke_set_clock(device, 0, &written, &error) == MCFLUKE_COMMAND_REJECTED);
+    CHECK(written == 0 && fake_write_count() == count + 2);
+    fake_program_reply("");
+    count = fake_write_count();
+    CHECK(mcfluke_set_clock(device, 600, &written, &error) == MCFLUKE_TIMEOUT);
+    CHECK(written == 0 && fake_write_count() == count + 2);
+    CHECK(mcfluke_get_clock(device, &counter, &error) == MCFLUKE_OK && counter % MCFLUKE_CLOCK_TICKS_PER_DAY == 600);
+    CHECK(mcfluke_set_clock(device, 1200, NULL, &error) == MCFLUKE_OK);
+    mcfluke_close(device);
+}
+
 int main(void)
 {
     parsers();
     decimal_conversion();
+    clock_commands();
     protocol();
     printf("%d checks, %d failures\n", checks, failures);
     return failures ? EXIT_FAILURE : EXIT_SUCCESS;
