@@ -4,9 +4,40 @@ Python 3.10+; no runtime or test dependencies beyond the standard library.
 The binding calls the **same native C core** through `ctypes.CDLL` (cdecl).
 It does not implement a serial protocol. Importing `mcfluke` does not load native code.
 
-## Run without installing anything
+## Visual Studio 2026
 
-Build the root native project first. From this `python` directory in PowerShell:
+Open the root MCFluke solution in Visual Studio 2026 with Python development and
+Desktop development with C++ installed. Select Debug or Release, build the
+solution normally, set **MCFluke.Python** as the startup project, and press F5.
+No separate native-build command, package installation or environment editing
+is needed. Select an installed/global **64-bit Python** environment in Visual
+Studio; the project does not pin an interpreter path or create a virtualenv.
+
+`MCFluke.Python.pyproj` starts `examples\read_display.py` with `--port COM3`,
+working directory `python`, and source search path `src`. The Debug/Release
+language configurations use Any CPU, mapped from the solution's Debug|x64 and
+Release|x64 configurations; the native project reference builds
+`MCFluke.Native` for x64. Required imports are `..\eng\MCFluke.Paths.props` and
+the installed VS18 `Python Tools\Microsoft.PythonTools.targets`, not optional
+fallback imports. The shared props select `out\vs\bin\x64\$(Configuration)\`.
+The project `Environment` sets `MCFLUKE_LIBRARY` to that configuration's exact
+`mcfluke.dll` and `PYTHONPATH` to the project's `src` directory.
+Language build outputs are isolated in `out\vs\bin\MCFluke.Python\$(Configuration)\`
+and intermediates in `out\vs\obj\MCFluke.Python\$(Configuration)\`.
+The base intermediate path is set before `Microsoft.Common.props`, so project
+extension/cache files also stay under `out\vs`, not the source directory.
+These paths do not change the exact native-library launch override.
+The installed Python Tools select the interpreter; their **unittest** support
+is configured for Test Explorer discovery in `tests`, pattern `test*.py`.
+Build the solution before running native simulator tests in Test Explorer.
+
+F5 uses the real COM3 port by default. To run without hardware, change the
+project's Debug script arguments to `--port sim://187 --count 3`.
+Both modes only read identity and the primary display.
+
+## Optional direct example
+
+After building the solution in Visual Studio, from this `python` directory:
 
 ```powershell
 $env:PYTHONPATH = "$PWD\src"
@@ -33,9 +64,12 @@ dependency; the commands here do not install or download anything.
 
 `library_path=` explicitly selects an absolute library file. Otherwise
 `MCFLUKE_LIBRARY`, when set, must be an **absolute file path** and is authoritative
-(a bad override never falls back). Without an override, discovery checks adjacent
-and ancestor `build\bin` directories, Python's installation `lib`/`bin`, then the
-platform's installed-library search. Names are `mcfluke.dll`, `libmcfluke.so`
+(a bad override never falls back). Without an override, discovery checks
+ancestor `out\vs\bin\x64\Debug` and `Release` directories first, preferring Debug
+when both exist at the same root. Then it checks adjacent and ancestor legacy
+`build\bin` directories, Python's installation `lib`/`bin`, and the platform's
+installed-library search. The IDE's explicit per-configuration override takes
+precedence over that default search. Names are `mcfluke.dll`, `libmcfluke.so`
 (also `.so.1`), or `libmcfluke.dylib`. Architecture/dependencies must match Python.
 Missing libraries produce `DllNotFoundError` with remediation. ABI 1 is required.
 
@@ -121,19 +155,20 @@ counter eventually wraps. Both operations share the existing per-device lock,
 disposal guards and structured error handling. Clock operations never run
 implicitly in the examples.
 
-## Offline tests
+## Offline tests and maintainer checks
 
-From `python`, with `PYTHONPATH` set as above:
+Visual Studio Test Explorer uses the configured stdlib unittest discovery.
+For portable command-line test runs from `python`, with `PYTHONPATH` set as above:
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
 These tests never open a real serial port: integration tests use `sim://187`
-and explicitly fail with native-build instructions if the native library is
+and explicitly fail with Visual Studio build instructions if the native library is
 missing. Binding-only tests (ABI declarations, error conversion, concurrency,
 finalization, disposal, clock validation/errors and read-only example behavior)
-need no native build:
+need no native build. They also cover VS output resolution and override precedence:
 
 ```powershell
 python -m unittest discover -s tests -p test_binding.py -v

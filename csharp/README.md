@@ -5,22 +5,19 @@ Original, dependency-free .NET 10 code for the immutable ABI 1 contract in
 
 ## Build and run
 
-From the repository root in PowerShell, with .NET SDK 10.0.404 or later:
+Open `MCFluke.sln` in Visual Studio 2026, choose Debug/Release | x64, and
+Build Solution. Set **MCFluke.Exerciser** as the startup project and select
+**Fluke 187 - COM3**, **Simulator**, **Offline self-tests**, or
+**COM3 - 5 read-only samples**, then F5. No manual build commands are needed.
 
-```powershell
-dotnet build .\csharp\MCFluke.Exerciser\MCFluke.Exerciser.csproj
-dotnet run --project .\csharp\MCFluke.Exerciser -- --help
-dotnet run --project .\csharp\MCFluke.Exerciser -- --self-test
-dotnet run --project .\csharp\MCFluke.Exerciser -- --port sim://187
-```
-
-The self-test needs the native CMake library but **no hardware**. It always opens
+The self-test needs the native library but **no hardware**. It always opens
 exactly `sim://187`; it rejects `--port`, `--count`, and `--interval` alongside
 `--self-test`. Simulation is never a fallback for a failed hardware connection.
 
-After building the native CMake target, the binding discovers the native library
-in the application output directory or `build\bin` beneath any ancestor of that
-directory. It does **not** rely on the current working directory. Expected names:
+The Visual Studio project reference builds the native DLL and copies it
+transitively beside the application. Discovery also supports matching
+`out\vs\bin\x64\Debug` / `Release` outputs and portable `build\bin` locations
+beneath ancestors. It does **not** rely on the working directory. Expected names:
 `mcfluke.dll` on Windows, `libmcfluke.so` on Linux, `libmcfluke.dylib` on macOS.
 For publishing, running outside the repository, or choosing a specific build:
 
@@ -36,22 +33,16 @@ with nullable analysis and warnings treated as errors.
 The managed assembly is named `MCFluke.Managed.dll` to avoid colliding with
 native `mcfluke.dll` on case-insensitive Windows filesystems.
 
-To create the version `0.1.0` managed-only NuGet package, including this README:
-
-```powershell
-dotnet pack .\csharp\MCFluke\MCFluke.csproj --configuration Release --output .\out\packages
-```
+The SDK project retains its version `0.1.0` managed-only NuGet package
+metadata, including this README.
 
 The native library is built and supplied separately; it is not bundled in the
 NuGet package. No package license has been selected or declared.
 
 ## Real hardware: explicit, read-only bounded mode
 
-Only run these commands when the specified meter and port are intended:
-
-```powershell
-dotnet run --project .\csharp\MCFluke.Exerciser -- --port COM3 --count 5 --interval 2
-```
+Use the **COM3 - 5 read-only samples** launch profile only when that meter and
+port are intended. Other ports/counts can be set in the project's Debug UI.
 
 `--port` defaults to `COM3`; serial configuration is handled by native code
 (9600 baud, 8N1, no handshake). Bounded mode performs only connection/ID

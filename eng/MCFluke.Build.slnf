@@ -1,0 +1,13 @@
+{
+  "solution": {
+    "path": "..\\MCFluke.sln",
+    "projects": [
+      "native\\MCFluke.Native.vcxproj",
+      "native\\MCFluke.C.Example.vcxproj",
+      "native\\MCFluke.Bridge.vcxproj",
+      "native\\MCFluke.NativeTests.vcxproj",
+      "csharp\\MCFluke\\MCFluke.csproj",
+      "csharp\\MCFluke.Exerciser\\MCFluke.Exerciser.csproj"
+    ]
+  }
+}

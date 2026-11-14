@@ -1,0 +1,37 @@
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
+  </PropertyGroup>
+  <Import Project="..\eng\MCFluke.Paths.props" />
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>$(MCFlukeRoot)out\vs\obj\checks\$(Configuration)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ProjectGuid>{AFCA20CE-EB5A-44F6-B341-DF562C61E05B}</ProjectGuid>
+    <ProjectHome>..</ProjectHome>
+    <StartupFile>tools\run_checks.py</StartupFile>
+    <SearchPath>python\src</SearchPath>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>$(MCFlukeNativeBin)checks\</OutputPath>
+    <Name>MCFluke.OfflineChecks</Name>
+    <RootNamespace>MCFlukeOfflineChecks</RootNamespace>
+    <LaunchProvider>Standard Python launcher</LaunchProvider>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">18.0</VisualStudioVersion>
+    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <Environment>MCFLUKE_NATIVE_DIR=$(MCFlukeNativeBin)
+MCFLUKE_CONFIGURATION=$(Configuration)</Environment>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\tools\run_checks.py" />
+    <Compile Include="test_bridge.py" />
+    <Compile Include="test_serial.py" />
+    <Compile Include="verify_examples.py" />
+    <None Include="..\tools\build.py" />
+    <None Include="..\tools\verify_vs_build.py" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+  <Target Name="CoreCompile" />
+</Project>

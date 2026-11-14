@@ -319,7 +319,7 @@ internal static class ExerciserApp
         --help, -h        This help; does not load native code or open a port.
 
         Native discovery: absolute MCFLUKE_LIBRARY override, application directory, then
-        ancestor build\bin directories. Build native code first; no simulator fallback.
+        Visual Studio native outputs and ancestor build\bin directories. Build the solution first; no simulator fallback.
         The platform names are mcfluke.dll, libmcfluke.so, and libmcfluke.dylib.
 
         Interactive mode covers identity, readings, every SF button, default setup, RI,

@@ -44,7 +44,7 @@ internal static class SelfTests
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             Console.Error.WriteLine($"BLOCKED native simulator tests: {exception.Message}");
-            Console.Error.WriteLine("Build the native CMake library or set absolute MCFLUKE_LIBRARY; no hardware fallback was attempted.");
+            Console.Error.WriteLine("Build the Visual Studio solution or set absolute MCFLUKE_LIBRARY; no hardware fallback was attempted.");
             Console.WriteLine($"Managed results: {passed} passed, {failed} failed; native coverage NOT RUN.");
             return 1;
         }

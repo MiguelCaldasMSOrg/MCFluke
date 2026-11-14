@@ -1,205 +1,148 @@
 # MCFluke
 
 Plain-C access to the **Fluke 187** optical serial interface, with Python, C#
-and JavaScript bindings and runnable programs in all four languages.
+and JavaScript bindings. Open **`MCFluke.sln` in Visual Studio 2026** to work
+with all components in one solution, as separate projects.
 
-All bindings use the same C implementation. There is no dependency on sigrok,
-PulseView, Python serial packages, npm native addons, or C++.
+The normal Windows workflow is **Build Solution, choose a startup project,
+F5**. No CMake, shell build script, or manually entered build command is
+required. Visual Studio uses its standard build engine internally.
 
-| Component | Purpose |
+## Open, build and run
+
+1. Open `MCFluke.sln` in Visual Studio 2026.
+2. Select **Debug | x64** or **Release | x64**, then **Build Solution**.
+3. Set **MCFluke.Exerciser** as the startup project. Choose a launch profile
+   and press **F5**.
+
+The C# profiles are **Fluke 187 - COM3**, **Simulator**, **Offline self-tests**
+and **COM3 - 5 read-only samples**. The first is interactive. The offline
+profiles never open a hardware port.
+
+To run another language, set **MCFluke.C.Example**, **MCFluke.Python**, or
+**MCFluke.JavaScript** as the startup project and press F5. The native
+dependencies build first, and native-library/helper paths are supplied
+automatically. Examples print identification and the primary display every
+**two seconds**, without pressing buttons or resetting settings.
+
+For the complete offline suite, set **MCFluke.OfflineChecks** as the startup
+project and use **Start Without Debugging**. It runs already-built native,
+Python, JavaScript and C# checks, including example cadence checks.
+
+## Solution projects
+
+| Project | Role |
 |---|---|
-| `include/`, `src/` | C11 shared library, Windows and POSIX serial backends |
-| `examples/c/` | Read-only ID and primary-display program |
-| `python/` | Python `ctypes` binding, example and tests |
-| `csharp/` | .NET 10 binding and comprehensive console exerciser |
-| `javascript/` | Node.js binding through the persistent native C bridge |
-| `tests/` | Protocol transcripts, bridge, serial-backend and example-cadence checks |
-| `docs/` | Command coverage, limitations and bridge contract |
+| MCFluke.Native | C11 shared library (`mcfluke.dll`) |
+| MCFluke.C.Example | Read-only C console program |
+| MCFluke.Bridge | Persistent native helper for JavaScript |
+| MCFluke.NativeTests | Native protocol/transcript test console |
+| MCFluke (Managed folder) | .NET 10 binding library (`MCFluke.Managed.dll`) |
+| MCFluke.Exerciser | Full C# console exerciser |
+| MCFluke.Python | Python package, example and unit tests |
+| MCFluke.JavaScript | Node.js package, example and tests |
+| MCFluke.OfflineChecks | IDE-launchable complete offline check runner |
+
+The `.vcxproj` files are Visual Studio's native project format, but the
+compiler is explicitly set to **C**, with **C11** enabled. No C++ rewrite or
+wrapper is involved. All bindings share this same native implementation;
+there is no sigrok/PulseView dependency.
+
+## Visual Studio requirements
+
+The included `.vsconfig` lists the expected workloads:
+
+- Desktop development with C++ (MSVC v145 and a Windows SDK).
+- .NET desktop development (.NET SDK 10).
+- Python development, with a **64-bit Python 3.10+** environment.
+- Node.js development, with Node.js 22+.
+
+If Visual Studio reports a missing workload, use the offered Visual Studio
+Installer integration. The repository does not silently skip required
+language tools. Choose your installed 64-bit interpreter in the Python
+Environments UI; no user's interpreter or Node installation path is embedded.
+
+## Hardware and safety
+
+Use an electrically isolated optical adapter compatible with the Fluke 187.
+A generic infrared device is not automatically compatible. The development
+setup successfully read a real Fluke 187 through a CP210x-based optical head
+on **COM3, 9600 baud, 8N1**, without flow control.
+
+For communication checks, leave the measurement leads disconnected. Keep
+the meter awake and align the optical transmitter/receiver with its IR
+windows. Manual alignment can be intermittent. Communication does not
+change the instrument's electrical ratings or safety requirements.
+
+Only one process can own COM3 at a time. Stop another running example,
+sigrok, or serial terminal before launching a different project.
+
+## Full exerciser and clock synchronization
+
+The C# menu exposes identification, single/repeated readings, remote buttons,
+default setup, instrument reset, timeouts, parsers, version and status data.
+Reading timestamps are **PC local time**, in `HH:mm:ss`; the exact meter
+display string is preserved and numeric values are not SI-scaled.
+
+Factory reset requires typed **RESET**. Calibration entry separately requires
+**CALIBRATION**. Neither is performed automatically.
+
+Menu **13** synchronizes the Fluke clock after typed **SYNC**. It measures
+turnaround, targets the next feasible **0.1-second boundary**, verifies
+clock readback and corrects again only if needed. Normal execution takes
+seconds, not minutes. Other settings are preserved by read-modify-write.
+The extended `QS` / `PS` path is experimental; see
+[clock synchronization](docs/clock-sync.md) for evidence and accuracy limits.
+
+## Outputs and deployment
+
+Native Windows outputs are separated by architecture and configuration:
+
+```text
+out\vs\bin\x64\Debug\
+out\vs\bin\x64\Release\
+```
+
+The C# project dependency copies the matching native DLL beside the managed
+application automatically. Python/JavaScript projects provide exact native
+paths in their debugger environments. Native intermediates are also
+project/configuration-separated under `out\vs\obj`.
+
+Standalone/deployment overrides remain available: `MCFLUKE_LIBRARY` is an
+absolute shared-library path; `MCFLUKE_HOST` is an absolute helper path.
+They are optional in the solution workflow. Explicit overrides are
+authoritative: failures do not select a different build or simulated meter.
+
+NuGet/Python/npm packages contain the bindings, not platform-specific native
+artifacts. Supply the native library/helper separately when deploying.
+Existing public APIs and native ABI 1 are retained.
+
+## Cross-platform checks and maintenance
+
+Portable C/POSIX sources remain supported. CI uses the same native/C# solution
+projects on a Visual Studio 2026 Windows runner, and the system C11 compiler
+on Linux/macOS, without CMake. `eng\MCFluke.Build.slnf` is a CI filter of the
+same solution, not a second solution; it excludes IDE-only language project
+types while their Python/Node runtimes run the complete checks.
+
+`tools\build.py` and `tools\run_checks.py` are automation entry points, not
+steps required from a Visual Studio user. POSIX native outputs use
+`build/bin`; the Windows solution uses the configuration-specific paths
+above. Missing build products fail explicitly rather than using a successful
+simulation fallback.
+
+The maintainer-only `tools\verify_vs_build.py` checks configuration switching,
+incremental builds and native-DLL copy recovery in a disposable sibling copy.
+It keeps source inputs read-only and avoids `%TEMP%`, which MSVC excludes
+from reliable file tracking.
+
+See [protocol coverage](docs/protocol.md), the binding READMEs and
+[bridge contract](docs/bridge.md) for API details and limitations.
+
+Initial development version: **0.1.0**, native ABI **1**. No redistribution
+license has been selected yet.
 
 Repository: <https://github.com/MiguelCaldasMSOrg/MCFluke>
 
-## Hardware
-
-Use an electrically isolated optical adapter that is compatible with the
-Fluke 187. A generic infrared device is not automatically compatible. The
-initial development setup successfully identified a real Fluke 187 with a
-CP210x-based optical head on **COM3 at 9600 8N1**, without flow control.
-
-Keep the optical transmitter/receiver aligned with the meter's IR windows.
-Test communications with the measurement leads disconnected. Never bypass the
-meter's isolation, modify the meter's safety features, or assume a software
-connection changes its electrical ratings. Communication tests do not require
-a live circuit.
-
-Only one process can own the Windows COM port at a time. Stop sigrok or other
-serial tools before starting an MCFluke program. The meter must remain awake.
-
-## Build everything
-
-Prerequisites:
-
-- A C11 compiler and CMake 3.20 or newer. On Windows, use MSVC or MinGW-w64.
-- Python 3.10 or newer.
-- .NET SDK 10.
-- Node.js 22 or newer.
-
-From the repository root on Windows:
-
-```powershell
-python tools\build.py
-```
-
-The script builds the native library/programs and C# projects, then runs the
-offline checks in every language. **It never opens COM3 or sends commands to
-real hardware.** Tests explicitly select `sim://187`.
-
-An existing CMake cache is reused. For a fresh build with a specific generator:
-
-```powershell
-python tools\build.py --generator "MinGW Makefiles"
-```
-
-Use `--configuration Debug` for debug builds or `--skip-tests` to build only.
-Do not change generators inside an existing build directory.
-
-On Linux/macOS:
-
-```sh
-python tools/build.py
-```
-
-No third-party Python or JavaScript runtime packages are required. The Node
-binding starts the project's native helper, not a shell command.
-
-### C-only build
-
-```powershell
-cmake -S . -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
-```
-
-For MSVC omit `-G "MinGW Makefiles"` on a fresh build. Native tests require
-Python; `-DBUILD_TESTING=OFF` permits a C-only build without it. Native outputs
-are in `build\bin`, including `mcfluke.dll`, `mcfluke-example.exe` and
-`mcfluke-host.exe`. Linux/macOS use the normal `libmcfluke.so` /
-`libmcfluke.dylib` naming and executables without `.exe`.
-
-The C ABI is declared in [include/mcfluke.h](include/mcfluke.h). Native callers
-include that header and link the generated import/shared library. CMake
-installation is supported with `cmake --install build --prefix <destination>`.
-
-## Run against the meter
-
-The C, Python and JavaScript examples print identification once and then print
-the current primary display every **two seconds**. They never press buttons
-or reset settings. `--count 3` makes these examples stop after three readings;
-omit it to run until Ctrl+C.
-
-```powershell
-.\build\bin\mcfluke-example.exe --port COM3 --count 3
-python python\examples\read_display.py --port COM3 --count 3
-node javascript\examples\read-display.js --port COM3 --count 3
-```
-
-The Python checkout example locates its source package itself; it does not
-require installation or a `PYTHONPATH` setting. Its standalone launch is checked
-with Python's isolated mode, which ignores `PYTHONPATH`.
-
-Replace `COM3` with the actual port. Linux usually uses `/dev/ttyUSB0`; macOS
-usually uses a `/dev/cu.*` device. Change the physical selector yourself when
-the desired function requires moving the rotary switch.
-
-### Full C# exerciser
-
-```powershell
-dotnet run --project csharp\MCFluke.Exerciser -- --port COM3
-```
-
-The console exerciser provides identification, displayed readings, remote
-buttons, default setup, factory reset, timeout configuration, parser inspection
-and library information. It can exercise the entire exposed library, not just
-the read-only example path. Use `--help` for its command-line modes.
-
-Factory reset requires typed confirmation. Calibration entry has a separate
-confirmation and warning; it is not an automatic calibration procedure.
-Neither is performed automatically on real hardware.
-
-Menu **13** synchronizes the Fluke clock to the PC's local time after typed
-**SYNC** confirmation. It measures turnaround, targets the next feasible
-0.1-second boundary, reads the clock back, and corrects again only if needed.
-It normally finishes in seconds, without minute waits or mandatory repeated
-writes. Other settings are preserved. This uses experimental
-18x `QS` / `PS` commands; see [clock synchronization](docs/clock-sync.md) for
-protocol evidence, timing assumptions and accuracy limits.
-
-Run its complete offline self-test explicitly:
-
-```powershell
-dotnet run --project csharp\MCFluke.Exerciser -- --self-test
-```
-
-Language-specific usage is documented in each binding's README.
-
-## Build library packages
-
-The shared native library is built by CMake. Package the managed/interpreted
-bindings separately when needed:
-
-```powershell
-dotnet pack csharp\MCFluke --configuration Release --output out\packages
-python -m pip wheel --no-deps --wheel-dir out\packages .\python
-npm pack .\javascript --pack-destination out\packages
-```
-
-These packages do not bundle a platform-specific native library/helper. Deploy
-the native outputs alongside your application or set the discovery overrides
-below. None of these commands publishes to NuGet, PyPI or npm.
-
-## Native-library discovery
-
-Build before running the examples. The bindings support repository-local native
-outputs and explicit deployment overrides:
-
-- `MCFLUKE_LIBRARY`: absolute path to the native shared library for Python/C#.
-- `MCFLUKE_HOST`: absolute path to the native helper for JavaScript; keep the
-  corresponding shared library beside it on Windows.
-
-These are process environment variables, not changes to system-wide settings.
-Wrong native architecture, missing files and serial failures are reported
-explicitly. Real-connection failures never fall back to simulated readings.
-
-## Coverage and limitations
-
-The documented interface provides `ID`, `QM`, `SF`, `DS` and `RI`. MCFluke
-preserves the displayed text, numerical value in displayed units, and
-out-of-range/text states. It does not silently convert mV to V or an overload
-to a zero-valued measurement.
-
-Clock access additionally uses community-documented binary `QS` / `PS`.
-The front-panel editor is minute-resolution, but this counter uses deciseconds.
-These commands are not part of Fluke's original five-command technical note.
-
-`QM` reports the **primary** display only. The published interface does not
-give a full LCD/secondary-display query or remote rotary-switch control.
-Logging and Save are Fluke 189-only and are rejected locally for this 187
-library. See [the protocol coverage and safety notes](docs/protocol.md).
-
-## Tests and CI
-
-The public CI workflow builds on Windows, Linux and macOS, with no hardware
-access. It covers the shared protocol, state-changing command guards, native
-bridge, language bindings and the real two-second default output cadence.
-POSIX pseudo-terminal tests exercise fragmented replies and deadlines through
-the serial backend; they are explicitly skipped on Windows.
-
-The deterministic simulator is a protocol test double, not an electrical model
-or a substitute for checking accuracy with calibrated equipment.
-
-## Project status
-
-Initial development version: **0.1.0**, native ABI **1**. APIs may evolve before
-a stable release. No redistribution license has been selected yet.
-
-Fluke is a trademark of its respective owner. This independent project is not
-affiliated with or endorsed by Fluke.
+Fluke is a trademark of its respective owner. This independent project is
+not affiliated with or endorsed by Fluke.

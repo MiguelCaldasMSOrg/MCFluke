@@ -29,8 +29,11 @@ internal static class NativeLibraryLoader
             : OperatingSystem.IsMacOS() ? "libmcfluke.dylib"
             : "libmcfluke.so";
         var candidates = new List<string> { Path.Combine(AppContext.BaseDirectory, fileName) };
+        string? configuration = assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration;
         for (DirectoryInfo? ancestor = new(AppContext.BaseDirectory); ancestor is not null; ancestor = ancestor.Parent)
         {
+            foreach (string build in new[] { configuration, "Debug", "Release" }.OfType<string>().Distinct())
+                candidates.Add(Path.Combine(ancestor.FullName, "out", "vs", "bin", "x64", build, fileName));
             candidates.Add(Path.Combine(ancestor.FullName, "build", "bin", fileName));
         }
 
@@ -44,7 +47,7 @@ internal static class NativeLibraryLoader
         }
 
         throw new DllNotFoundException(
-            $"Cannot load {fileName}. Build the native CMake target or set MCFLUKE_LIBRARY " +
+            $"Cannot load {fileName}. Build MCFluke.sln in Visual Studio or set MCFLUKE_LIBRARY " +
             $"to its absolute path. Searched:{Environment.NewLine}{string.Join(Environment.NewLine, candidates)}");
     }
 }

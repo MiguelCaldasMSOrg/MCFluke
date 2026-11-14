@@ -1,5 +1,5 @@
 import childProcess from 'node:child_process';
-import { statSync } from 'node:fs';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -155,7 +155,7 @@ function stringResult(value) {
 }
 
 function isFile(candidate) {
-  try { return statSync(candidate).isFile(); } catch { return false; }
+  try { return fs.statSync(candidate).isFile(); } catch { return false; }
 }
 
 export function resolveHostPath(hostPath) {
@@ -170,17 +170,28 @@ export function resolveHostPath(hostPath) {
   }
   const name = process.platform === 'win32' ? 'mcfluke-host.exe' : 'mcfluke-host';
   let directory = path.dirname(fileURLToPath(import.meta.url));
+  const ancestors = [];
   for (;;) {
-    for (const candidate of [path.join(directory, 'build', 'bin', name), path.join(directory, name)]) {
-      if (isFile(candidate)) return candidate;
-    }
+    ancestors.push(directory);
     const parent = path.dirname(directory);
     if (parent === directory) break;
     directory = parent;
   }
+  for (const ancestor of ancestors) {
+    for (const configuration of ['Debug', 'Release']) {
+      const candidate = path.join(ancestor, 'out', 'vs', 'bin', 'x64', configuration, name);
+      if (isFile(candidate)) return candidate;
+    }
+  }
+  for (const ancestor of ancestors) {
+    for (const candidate of [path.join(ancestor, 'build', 'bin', name), path.join(ancestor, name)]) {
+      if (isFile(candidate)) return candidate;
+    }
+  }
   throw new HostNotFoundError(
-    `Cannot find ${name}. Build the native project into build/bin or set MCFLUKE_HOST `
-    + 'to the absolute executable path. The host also needs the matching native library.',
+    `Cannot find ${name}. Build the MCFluke solution in Visual Studio 2026 `
+    + '(out/vs/bin/x64/Debug or Release) or set MCFLUKE_HOST to the absolute executable path. '
+    + 'Legacy build/bin remains a fallback. The host also needs the matching native library.',
   );
 }
 

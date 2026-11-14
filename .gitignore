@@ -12,3 +12,5 @@ node_modules/
 *.user
 *.log
 .DS_Store
+/Backup/
+/UpgradeLog*.htm

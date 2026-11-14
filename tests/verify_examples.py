@@ -64,7 +64,8 @@ def verify(name, command):
 
 
 def main():
-    native = ROOT / "build" / "bin" / ("mcfluke-example.exe" if os.name == "nt" else "mcfluke-example")
+    directory = Path(os.environ.get("MCFLUKE_NATIVE_DIR", str(ROOT / "build" / "bin")))
+    native = directory / ("mcfluke-example.exe" if os.name == "nt" else "mcfluke-example")
     verify("C", [native, "--port", "sim://187", "--count", "3"])
     verify("Python", [sys.executable, "-I", ROOT / "python" / "examples" / "read_display.py",
                       "--port", "sim://187", "--count", "3"])

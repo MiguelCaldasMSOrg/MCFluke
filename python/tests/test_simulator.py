@@ -14,8 +14,9 @@ class NativeSimulatorTests(unittest.TestCase):
             cls.version = m.get_version()
         except m.DllNotFoundError as exc:
             raise RuntimeError(
-                "Native offline-test prerequisite missing: build the root native project "
-                "into build\\bin or set MCFLUKE_LIBRARY to its absolute library path. "
+                "Native offline-test prerequisite missing: build the MCFluke solution in "
+                "Visual Studio 2026 (out\\vs\\bin\\x64\\Debug or Release), or set "
+                "MCFLUKE_LIBRARY to its absolute library path. "
                 "These tests use only sim://187, never COM3."
             ) from exc
 

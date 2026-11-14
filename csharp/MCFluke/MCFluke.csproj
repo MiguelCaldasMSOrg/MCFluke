@@ -12,7 +12,20 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+  <Import Project="..\..\eng\MCFluke.Paths.props" />
   <ItemGroup>
     <None Include="..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(MCFlukeUseVisualStudioNative)' == 'true'">
+    <ProjectReference Include="..\..\native\MCFluke.Native.vcxproj">
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+      <PrivateAssets>all</PrivateAssets>
+      <AdditionalProperties>Platform=x64</AdditionalProperties>
+      <SetPlatform>Platform=x64</SetPlatform>
+    </ProjectReference>
+    <None Include="$(MCFlukeNativeBin)mcfluke.dll" Link="mcfluke.dll"
+          CopyToOutputDirectory="IfDifferent" CopyToPublishDirectory="PreserveNewest"
+          Pack="false" />
   </ItemGroup>
 </Project>

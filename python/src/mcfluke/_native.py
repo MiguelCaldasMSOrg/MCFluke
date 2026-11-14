@@ -61,7 +61,16 @@ def _names():
 def _candidates():
     seen = set()
     package = Path(__file__).resolve().parent
-    for ancestor in (package, *package.parents):
+    ancestors = (package, *package.parents)
+    for ancestor in ancestors:
+        for configuration in ("Debug", "Release"):
+            directory = ancestor / "out" / "vs" / "bin" / "x64" / configuration
+            for name in _names():
+                candidate = directory / name
+                if candidate not in seen and candidate.is_file():
+                    seen.add(candidate)
+                    yield str(candidate)
+    for ancestor in ancestors:
         for directory in (ancestor, ancestor / "build" / "bin"):
             for name in _names():
                 candidate = directory / name
@@ -168,8 +177,10 @@ def load(library_path=None):
             return library
         detail = "\n".join(failures)
         raise DllNotFoundError(
-            "Cannot load the MCFluke native library. Build the native project into "
-            "build/bin, install the library on the OS library search path, or set "
+            "Cannot load the MCFluke native library. Build the MCFluke solution in "
+            "Visual Studio 2026 (out/vs/bin/x64/Debug or Release), install the library "
+            "on the OS library search path, or set "
             "MCFLUKE_LIBRARY to its absolute path. Check architecture and dependent "
-            f"libraries as well.\n{detail}"
+            "libraries as well; Windows requires 64-bit Python. Legacy build/bin "
+            f"remains a fallback.\n{detail}"
         )

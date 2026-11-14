@@ -5,9 +5,40 @@ persistent native `mcfluke-host` process per connection, without a shell.
 The host calls the shared C core; JavaScript does **not** implement a serial
 protocol. Importing the module never launches a process.
 
-## Read-only example
+## Visual Studio 2026
 
-Build the root native project, then from this `javascript` directory:
+Open the root MCFluke solution in Visual Studio 2026 with Node.js development
+and Desktop development with C++ installed. Select Debug or Release, build the
+solution normally, set **MCFluke.JavaScript** as the startup project, and press
+F5. No separate native-build command, npm installation or environment editing
+is needed. Visual Studio selects the installed/global Node.js runtime; no
+machine-specific `NodeExePath` is stored in the project.
+
+`MCFluke.JavaScript.njsproj` starts `examples\read-display.js` with
+`ScriptArguments=--port COM3`, working directory `javascript`, and browser launch
+disabled. The Debug/Release language configurations use Any CPU, mapped from
+the solution's Debug|x64 and Release|x64 configurations; the native
+project reference builds `MCFluke.Bridge` for x64 (and its native-core dependency).
+Required imports are `..\eng\MCFluke.Paths.props` and the installed VS18
+`Node.js Tools\Microsoft.NodejsToolsV2.targets`, with no silent missing-tool
+fallback. The shared props select `out\vs\bin\x64\$(Configuration)\`.
+The project `Environment` supplies `MCFLUKE_HOST` as that configuration's exact
+`mcfluke-host.exe` path.
+Language build outputs are isolated in `out\vs\bin\MCFluke.JavaScript\$(Configuration)\`
+and intermediates in `out\vs\obj\MCFluke.JavaScript\$(Configuration)\`.
+The base intermediate path is set before `Microsoft.Common.props`, keeping
+project extension/cache files under `out\vs` rather than the source directory.
+The exact native-helper launch override is unchanged.
+
+F5 uses the real COM3 port by default. For a hardware-free run, change Script
+Arguments in project properties to `--port sim://187 --count 3`.
+Both modes only read identity and the primary display.
+Tests continue to use Node's built-in `node:test` via the existing `npm test`
+script; no Mocha/Jest adapter or dependencies are added.
+
+## Optional direct read-only example
+
+After building the solution in Visual Studio, from this `javascript` directory:
 
 ```powershell
 node examples\read-display.js --port sim://187 --count 3
@@ -43,7 +74,9 @@ The real port is verified as a FLUKE 187 before the host announces readiness.
 
 `hostPath` in `open` overrides discovery; otherwise `MCFLUKE_HOST` is used when
 set. Either override must name an absolute executable file, and a bad override
-never falls back. Default discovery checks package-adjacent and ancestor
+never falls back. Default discovery checks ancestor
+`out\vs\bin\x64\Debug` and `Release` directories first, preferring Debug when both
+exist at the same root. It then checks package-adjacent and ancestor legacy
 `build\bin` locations for `mcfluke-host.exe` (Windows) or `mcfluke-host`
 (Linux/macOS). The host needs its matching native library available. Missing
 hosts raise `HostNotFoundError`. No global configuration or environment changes
@@ -126,7 +159,10 @@ safe integers in the full unsigned 32-bit range. Operations use the same
 per-client queue, disposal guards and structured errors as existing methods.
 The read-only examples never invoke clock operations.
 
-## Offline tests
+## Offline tests and maintainer checks
+
+After building the solution in Visual Studio, use its integrated terminal in
+`javascript` (these are tests, not separate build steps):
 
 ```powershell
 npm test
@@ -142,4 +178,13 @@ processes, serialization and shutdown:
 npm run test:unit
 ```
 
-The fake child is strictly a transport fixture, not a serial implementation.
+Resolver regressions need no native binaries:
+
+```powershell
+node --test test\resolver.test.js
+```
+
+They verify VS Debug/Release precedence, portable legacy lookup and authoritative
+explicit overrides without writing to native output directories or changing the
+parent process environment. The fake child is strictly a transport fixture,
+not a serial implementation.

@@ -215,6 +215,61 @@ class ABITests(unittest.TestCase):
                 loader.assert_called_once_with(str(Path(__file__).resolve()))
                 self.assertIs(_native.load(Path(__file__).resolve()), library)
 
+    def test_vs_outputs_precede_adjacent_and_legacy_libraries(self):
+        root = Path(__file__).resolve().parents[2]
+        debug = root / "out" / "vs" / "bin" / "x64" / "Debug" / "mcfluke.dll"
+        release = root / "out" / "vs" / "bin" / "x64" / "Release" / "mcfluke.dll"
+        adjacent = Path(_native.__file__).resolve().parent / "mcfluke.dll"
+        legacy = root / "build" / "bin" / "mcfluke.dll"
+        existing = {debug, release, adjacent, legacy}
+        with patch.object(_native, "_names", return_value=("mcfluke.dll",)):
+            with patch.object(Path, "is_file", lambda candidate: candidate in existing):
+                candidates = _native._candidates()
+                found = [next(candidates) for _ in range(4)]
+        self.assertEqual(found, [str(debug), str(release), str(adjacent), str(legacy)])
+
+    def test_release_and_legacy_discovery_fallbacks(self):
+        root = Path(__file__).resolve().parents[2]
+        release = root / "out" / "vs" / "bin" / "x64" / "Release" / "mcfluke.dll"
+        legacy = root / "build" / "bin" / "mcfluke.dll"
+        for existing, expected in (({release, legacy}, release), ({legacy}, legacy)):
+            with self.subTest(existing=existing):
+                with patch.object(_native, "_names", return_value=("mcfluke.dll",)):
+                    with patch.object(Path, "is_file", lambda candidate: candidate in existing):
+                        self.assertEqual(next(_native._candidates()), str(expected))
+
+    def test_environment_override_is_authoritative_without_search(self):
+        override = str(Path(__file__).resolve())
+        with patch.object(_native.os, "environ", {"MCFLUKE_LIBRARY": override}):
+            with patch.object(_native, "_candidates", side_effect=AssertionError("unexpected fallback")):
+                with patch.object(_native.C, "CDLL", return_value=FakeDLL()) as loader:
+                    with patch.dict(_native._libraries, clear=True):
+                        _native.load()
+                        loader.assert_called_once_with(override)
+        with patch.object(_native.os, "environ", {"MCFLUKE_LIBRARY": "relative.dll"}):
+            with patch.object(_native, "_candidates", side_effect=AssertionError("unexpected fallback")):
+                with self.assertRaises(m.DllNotFoundError):
+                    _native.load()
+
+    def test_explicit_path_takes_precedence_over_environment_and_discovery(self):
+        override = str(Path(__file__).resolve())
+        with patch.object(_native.os, "environ", {"MCFLUKE_LIBRARY": "invalid-environment.dll"}):
+            with patch.object(_native, "_candidates", side_effect=AssertionError("unexpected fallback")):
+                with patch.object(_native.C, "CDLL", return_value=FakeDLL()) as loader:
+                    with patch.dict(_native._libraries, clear=True):
+                        _native.load(override)
+                        loader.assert_called_once_with(override)
+
+    def test_platform_library_names_remain_portable(self):
+        for platform, expected in (
+            ("win32", ("mcfluke.dll",)),
+            ("darwin", ("libmcfluke.dylib",)),
+            ("linux", ("libmcfluke.so", "libmcfluke.so.1")),
+        ):
+            with self.subTest(platform=platform):
+                with patch.object(_native.sys, "platform", platform):
+                    self.assertEqual(_native._names(), expected)
+
 
 class BindingTests(unittest.TestCase):
     def setUp(self):

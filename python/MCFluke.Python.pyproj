@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
+    <VisualStudioVersion Condition="'$(VisualStudioVersion)' == ''">18.0</VisualStudioVersion>
+    <VSToolsPath Condition="'$(VSToolsPath)' == ''">$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)</VSToolsPath>
+  </PropertyGroup>
+  <Import Project="..\eng\MCFluke.Paths.props" />
+  <PropertyGroup>
+    <BaseOutputPath>$(MCFlukeRoot)out\vs\bin\MCFluke.Python\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MCFlukeRoot)out\vs\obj\MCFluke.Python\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <PropertyGroup>
+    <SchemaVersion>2.0</SchemaVersion>
+    <ProjectGuid>{F7DD790F-274A-491A-BA11-FCA6C6D310CA}</ProjectGuid>
+    <ProjectHome>.</ProjectHome>
+    <StartupFile>examples\read_display.py</StartupFile>
+    <WorkingDirectory>.</WorkingDirectory>
+    <OutputPath>$(BaseOutputPath)$(Configuration)\</OutputPath>
+    <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)\</IntermediateOutputPath>
+    <SearchPath>src</SearchPath>
+    <CommandLineArguments>--port COM3</CommandLineArguments>
+    <Environment>MCFLUKE_LIBRARY=$(MCFlukeNativeBin)mcfluke.dll
+PYTHONPATH=$(MSBuildProjectDirectory)\src</Environment>
+    <EnableNativeCodeDebugging>false</EnableNativeCodeDebugging>
+    <TestFramework>unittest</TestFramework>
+    <UnitTestRootDirectory>tests</UnitTestRootDirectory>
+    <UnitTestPattern>test*.py</UnitTestPattern>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="src\mcfluke\*.py" />
+    <Compile Include="examples\read_display.py" />
+    <Compile Include="tests\*.py" />
+    <Content Include="pyproject.toml" />
+    <Content Include="README.md" />
+    <Folder Include="src\" />
+    <Folder Include="src\mcfluke\" />
+    <Folder Include="examples\" />
+    <Folder Include="tests\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\native\MCFluke.Native.vcxproj">
+      <Project>{EACCC5EB-A066-4C14-AB67-82F8DF68BA62}</Project>
+      <Name>MCFluke.Native</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <Private>false</Private>
+      <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+      <SetPlatform>Platform=$(MCFlukeNativePlatform)</SetPlatform>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\Python Tools\Microsoft.PythonTools.targets" />
+  <Target Name="CoreCompile" />
+</Project>

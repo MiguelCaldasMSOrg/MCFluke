@@ -1,0 +1,109 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.0.0
+MinimumVisualStudioVersion = 18.0.0.0
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Managed", "Managed", "{6ADED3C3-491D-A43A-93DD-4F324D3E0A3F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MCFluke.Exerciser", "csharp\MCFluke.Exerciser\MCFluke.Exerciser.csproj", "{536E644B-B816-46AE-A73A-A3FE6AC7977E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MCFluke", "csharp\MCFluke\MCFluke.csproj", "{9675F35D-AB83-491C-88BA-34CE5B52E846}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Native C", "Native C", "{6059A133-01DD-429D-AE58-319CAE574BFA}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MCFluke.Native", "native\MCFluke.Native.vcxproj", "{EACCC5EB-A066-4C14-AB67-82F8DF68BA62}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MCFluke.C.Example", "native\MCFluke.C.Example.vcxproj", "{7F68F26E-FE1D-4CE3-AB28-2B5C4EC00E88}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MCFluke.Bridge", "native\MCFluke.Bridge.vcxproj", "{D4ECBA9A-5202-493F-8A55-F362E327F842}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "MCFluke.NativeTests", "native\MCFluke.NativeTests.vcxproj", "{8DE23185-1406-4FF8-865F-532F75E761EF}"
+EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "MCFluke.Python", "python\MCFluke.Python.pyproj", "{F7DD790F-274A-491A-BA11-FCA6C6D310CA}"
+	ProjectSection(ProjectDependencies) = postProject
+		{EACCC5EB-A066-4C14-AB67-82F8DF68BA62} = {EACCC5EB-A066-4C14-AB67-82F8DF68BA62}
+	EndProjectSection
+EndProject
+Project("{9092AA53-FB77-4645-B42D-1CCCA6BD08BD}") = "MCFluke.JavaScript", "javascript\MCFluke.JavaScript.njsproj", "{472A6B12-8A6E-4AAD-B0FD-5194075C9024}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D4ECBA9A-5202-493F-8A55-F362E327F842} = {D4ECBA9A-5202-493F-8A55-F362E327F842}
+	EndProjectSection
+EndProject
+Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "MCFluke.OfflineChecks", "tests\MCFluke.OfflineChecks.pyproj", "{AFCA20CE-EB5A-44F6-B341-DF562C61E05B}"
+	ProjectSection(ProjectDependencies) = postProject
+		{536E644B-B816-46AE-A73A-A3FE6AC7977E} = {536E644B-B816-46AE-A73A-A3FE6AC7977E}
+		{7F68F26E-FE1D-4CE3-AB28-2B5C4EC00E88} = {7F68F26E-FE1D-4CE3-AB28-2B5C4EC00E88}
+		{D4ECBA9A-5202-493F-8A55-F362E327F842} = {D4ECBA9A-5202-493F-8A55-F362E327F842}
+		{8DE23185-1406-4FF8-865F-532F75E761EF} = {8DE23185-1406-4FF8-865F-532F75E761EF}
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{178A03ED-4132-4F62-A6C1-2D374AE09C7B}"
+	ProjectSection(SolutionItems) = preProject
+		.vsconfig = .vsconfig
+		README.md = README.md
+		eng\MCFluke.Paths.props = eng\MCFluke.Paths.props
+		eng\MCFluke.Native.props = eng\MCFluke.Native.props
+		eng\MCFluke.Build.slnf = eng\MCFluke.Build.slnf
+		docs\protocol.md = docs\protocol.md
+		docs\clock-sync.md = docs\clock-sync.md
+		docs\bridge.md = docs\bridge.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{536E644B-B816-46AE-A73A-A3FE6AC7977E}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{536E644B-B816-46AE-A73A-A3FE6AC7977E}.Debug|x64.Build.0 = Debug|Any CPU
+		{536E644B-B816-46AE-A73A-A3FE6AC7977E}.Release|x64.ActiveCfg = Release|Any CPU
+		{536E644B-B816-46AE-A73A-A3FE6AC7977E}.Release|x64.Build.0 = Release|Any CPU
+		{9675F35D-AB83-491C-88BA-34CE5B52E846}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9675F35D-AB83-491C-88BA-34CE5B52E846}.Debug|x64.Build.0 = Debug|Any CPU
+		{9675F35D-AB83-491C-88BA-34CE5B52E846}.Release|x64.ActiveCfg = Release|Any CPU
+		{9675F35D-AB83-491C-88BA-34CE5B52E846}.Release|x64.Build.0 = Release|Any CPU
+		{EACCC5EB-A066-4C14-AB67-82F8DF68BA62}.Debug|x64.ActiveCfg = Debug|x64
+		{EACCC5EB-A066-4C14-AB67-82F8DF68BA62}.Debug|x64.Build.0 = Debug|x64
+		{EACCC5EB-A066-4C14-AB67-82F8DF68BA62}.Release|x64.ActiveCfg = Release|x64
+		{EACCC5EB-A066-4C14-AB67-82F8DF68BA62}.Release|x64.Build.0 = Release|x64
+		{7F68F26E-FE1D-4CE3-AB28-2B5C4EC00E88}.Debug|x64.ActiveCfg = Debug|x64
+		{7F68F26E-FE1D-4CE3-AB28-2B5C4EC00E88}.Debug|x64.Build.0 = Debug|x64
+		{7F68F26E-FE1D-4CE3-AB28-2B5C4EC00E88}.Release|x64.ActiveCfg = Release|x64
+		{7F68F26E-FE1D-4CE3-AB28-2B5C4EC00E88}.Release|x64.Build.0 = Release|x64
+		{D4ECBA9A-5202-493F-8A55-F362E327F842}.Debug|x64.ActiveCfg = Debug|x64
+		{D4ECBA9A-5202-493F-8A55-F362E327F842}.Debug|x64.Build.0 = Debug|x64
+		{D4ECBA9A-5202-493F-8A55-F362E327F842}.Release|x64.ActiveCfg = Release|x64
+		{D4ECBA9A-5202-493F-8A55-F362E327F842}.Release|x64.Build.0 = Release|x64
+		{8DE23185-1406-4FF8-865F-532F75E761EF}.Debug|x64.ActiveCfg = Debug|x64
+		{8DE23185-1406-4FF8-865F-532F75E761EF}.Debug|x64.Build.0 = Debug|x64
+		{8DE23185-1406-4FF8-865F-532F75E761EF}.Release|x64.ActiveCfg = Release|x64
+		{8DE23185-1406-4FF8-865F-532F75E761EF}.Release|x64.Build.0 = Release|x64
+		{F7DD790F-274A-491A-BA11-FCA6C6D310CA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F7DD790F-274A-491A-BA11-FCA6C6D310CA}.Debug|x64.Build.0 = Debug|Any CPU
+		{F7DD790F-274A-491A-BA11-FCA6C6D310CA}.Release|x64.ActiveCfg = Release|Any CPU
+		{F7DD790F-274A-491A-BA11-FCA6C6D310CA}.Release|x64.Build.0 = Release|Any CPU
+		{472A6B12-8A6E-4AAD-B0FD-5194075C9024}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{472A6B12-8A6E-4AAD-B0FD-5194075C9024}.Debug|x64.Build.0 = Debug|Any CPU
+		{472A6B12-8A6E-4AAD-B0FD-5194075C9024}.Release|x64.ActiveCfg = Release|Any CPU
+		{472A6B12-8A6E-4AAD-B0FD-5194075C9024}.Release|x64.Build.0 = Release|Any CPU
+		{AFCA20CE-EB5A-44F6-B341-DF562C61E05B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AFCA20CE-EB5A-44F6-B341-DF562C61E05B}.Debug|x64.Build.0 = Debug|Any CPU
+		{AFCA20CE-EB5A-44F6-B341-DF562C61E05B}.Release|x64.ActiveCfg = Release|Any CPU
+		{AFCA20CE-EB5A-44F6-B341-DF562C61E05B}.Release|x64.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{536E644B-B816-46AE-A73A-A3FE6AC7977E} = {6ADED3C3-491D-A43A-93DD-4F324D3E0A3F}
+		{9675F35D-AB83-491C-88BA-34CE5B52E846} = {6ADED3C3-491D-A43A-93DD-4F324D3E0A3F}
+		{EACCC5EB-A066-4C14-AB67-82F8DF68BA62} = {6059A133-01DD-429D-AE58-319CAE574BFA}
+		{7F68F26E-FE1D-4CE3-AB28-2B5C4EC00E88} = {6059A133-01DD-429D-AE58-319CAE574BFA}
+		{D4ECBA9A-5202-493F-8A55-F362E327F842} = {6059A133-01DD-429D-AE58-319CAE574BFA}
+		{8DE23185-1406-4FF8-865F-532F75E761EF} = {6059A133-01DD-429D-AE58-319CAE574BFA}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C61D7350-6132-4A40-A013-B534CA228970}
+	EndGlobalSection
+EndGlobal

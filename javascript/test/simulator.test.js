@@ -13,8 +13,9 @@ before(() => {
   try { resolveHostPath(); } catch (error) {
     if (!(error instanceof HostNotFoundError)) throw error;
     throw new Error(
-      'Native offline-test prerequisite missing: build the root native project into build\\bin '
-      + 'or set MCFLUKE_HOST to the absolute native host path. Tests only use sim://187, never COM3.',
+      'Native offline-test prerequisite missing: build the MCFluke solution in Visual Studio 2026 '
+      + '(out\\vs\\bin\\x64\\Debug or Release), or set MCFLUKE_HOST to the absolute native host path. '
+      + 'Tests only use sim://187, never COM3.',
       { cause: error },
     );
   }
