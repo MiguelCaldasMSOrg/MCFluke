@@ -151,9 +151,11 @@ class ABITests(unittest.TestCase):
     def test_import_does_not_load_library(self):
         script = (
             "import ctypes\n"
+            "import sys\n"
             "def fail(*args, **kwargs): raise AssertionError('loaded on import')\n"
             "ctypes.CDLL = fail\n"
             "import mcfluke\n"
+            "assert 'ctypes.util' not in sys.modules, 'ctypes.util imported eagerly'\n"
         )
         result = subprocess.run(
             [sys.executable, "-c", script], capture_output=True, text=True, timeout=10

@@ -1,7 +1,6 @@
 """Private, lazy cdecl declarations matching include/mcfluke.h."""
 
 import ctypes as C
-import ctypes.util
 import os
 from pathlib import Path
 import sys
@@ -75,7 +74,10 @@ def _candidates():
             if candidate not in seen and candidate.is_file():
                 seen.add(candidate)
                 yield str(candidate)
-    installed = ctypes.util.find_library("mcfluke")
+    # On macOS, importing ctypes.util itself loads libc.
+    from ctypes.util import find_library
+
+    installed = find_library("mcfluke")
     if installed:
         yield installed
     yield from _names()

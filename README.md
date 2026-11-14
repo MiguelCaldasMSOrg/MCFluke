@@ -129,6 +129,21 @@ dotnet run --project csharp\MCFluke.Exerciser -- --self-test
 
 Language-specific usage is documented in each binding's README.
 
+## Build library packages
+
+The shared native library is built by CMake. Package the managed/interpreted
+bindings separately when needed:
+
+```powershell
+dotnet pack csharp\MCFluke --configuration Release --output out\packages
+python -m pip wheel --no-deps --wheel-dir out\packages .\python
+npm pack .\javascript --pack-destination out\packages
+```
+
+These packages do not bundle a platform-specific native library/helper. Deploy
+the native outputs alongside your application or set the discovery overrides
+below. None of these commands publishes to NuGet, PyPI or npm.
+
 ## Native-library discovery
 
 Build before running the examples. The bindings support repository-local native

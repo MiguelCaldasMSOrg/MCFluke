@@ -28,9 +28,11 @@ static mcfluke_status os_error(mcfluke_error *error, const char *operation)
     WCHAR wide_detail[160] = {0};
     char detail[160] = {0}, message[256];
     if (FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL, code, 0, wide_detail, (DWORD)(sizeof(wide_detail) / sizeof(wide_detail[0])), NULL))
-        (void)WideCharToMultiByte(CP_UTF8, 0, wide_detail, -1, detail, (int)sizeof(detail), NULL, NULL);
-    (void)snprintf(message, sizeof(message), "%s (Windows %lu): %.150s",
+        NULL, code, 0, wide_detail, (DWORD)(sizeof(wide_detail) / sizeof(wide_detail[0])), NULL)) {
+        if (!WideCharToMultiByte(CP_UTF8, 0, wide_detail, -1, detail, (int)sizeof(detail), NULL, NULL))
+            detail[0] = '\0';
+    }
+    (void)snprintf(message, sizeof(message), "%s (Windows %lu): %s",
         operation, (unsigned long)code, detail);
     return mcfluke_fail(error, MCFLUKE_IO_ERROR, (int32_t)code, message);
 }

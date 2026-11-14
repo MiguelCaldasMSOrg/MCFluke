@@ -36,6 +36,15 @@ with nullable analysis and warnings treated as errors.
 The managed assembly is named `MCFluke.Managed.dll` to avoid colliding with
 native `mcfluke.dll` on case-insensitive Windows filesystems.
 
+To create the version `0.1.0` managed-only NuGet package, including this README:
+
+```powershell
+dotnet pack .\csharp\MCFluke\MCFluke.csproj --configuration Release --output .\out\packages
+```
+
+The native library is built and supplied separately; it is not bundled in the
+NuGet package. No package license has been selected or declared.
+
 ## Real hardware: explicit, read-only bounded mode
 
 Only run these commands when the specified meter and port are intended:
