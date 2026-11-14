@@ -45,12 +45,17 @@ class SerialTests(unittest.TestCase):
             ctypes.c_void_p, ctypes.POINTER(Reading), ctypes.POINTER(Error)
         ]
         self.lib.mcfluke_read_display.restype = ctypes.c_int
+        self.lib.mcfluke_set_timeout.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(Error)
+        ]
+        self.lib.mcfluke_set_timeout.restype = ctypes.c_int
         self.master, self.slave = pty.openpty()
         self.port = os.ttyname(self.slave).encode()
         self.stop = threading.Event()
         self.reply = b"0\rQM,+1.234 V DC\r"
         self.identity = b"0\rFLUKE 187,V2.02,PTY-TEST\r"
         self.delay = 0.001
+        self.chunk_size = 4
         self.commands = []
         self.thread = threading.Thread(target=self.emulate, daemon=True)
         self.thread.start()
@@ -75,14 +80,20 @@ class SerialTests(unittest.TestCase):
                 command, pending = pending.split(b"\r", 1)
                 self.commands.append(command)
                 response = self.identity if command == b"ID" else self.reply
-                for byte in response:
+                for position in range(0, len(response), self.chunk_size):
                     if self.stop.wait(self.delay):
                         return
-                    os.write(self.master, bytes([byte]))
+                    os.write(self.master, response[position:position + self.chunk_size])
 
     def connect(self, timeout=1000):
         status = self.lib.mcfluke_open(self.port, timeout, ctypes.byref(self.device), ctypes.byref(self.error))
         self.assertEqual(status, 0, self.error.message.decode())
+
+    def set_timeout(self, milliseconds):
+        self.assertEqual(
+            self.lib.mcfluke_set_timeout(self.device, milliseconds, ctypes.byref(self.error)),
+            0, self.error.message.decode(),
+        )
 
     def test_fragmented_real_backend(self):
         self.connect()
@@ -93,7 +104,8 @@ class SerialTests(unittest.TestCase):
         self.assertEqual(self.commands, [b"ID", b"QM"])
 
     def test_partial_timeout_and_recovery(self):
-        self.connect(timeout=150)
+        self.connect()
+        self.set_timeout(150)
         self.reply = b"0\rQM,+1"
         reading = Reading()
         start = time.monotonic()
@@ -118,7 +130,9 @@ class SerialTests(unittest.TestCase):
         self.assertFalse(self.device)
 
     def test_total_deadline_not_per_byte(self):
-        self.connect(timeout=150)
+        self.connect()
+        self.set_timeout(150)
+        self.chunk_size = 1
         self.delay = 0.05
         reading = Reading()
         start = time.monotonic()
