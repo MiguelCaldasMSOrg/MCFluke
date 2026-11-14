@@ -1,4 +1,9 @@
-"""Read-only example; run with python/src on PYTHONPATH."""
+"""Read-only example runnable directly from a source checkout."""
+
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from mcfluke.__main__ import main
 

@@ -66,7 +66,7 @@ def verify(name, command):
 def main():
     native = ROOT / "build" / "bin" / ("mcfluke-example.exe" if os.name == "nt" else "mcfluke-example")
     verify("C", [native, "--port", "sim://187", "--count", "3"])
-    verify("Python", [sys.executable, ROOT / "python" / "examples" / "read_display.py",
+    verify("Python", [sys.executable, "-I", ROOT / "python" / "examples" / "read_display.py",
                       "--port", "sim://187", "--count", "3"])
     verify("JavaScript", ["node", ROOT / "javascript" / "examples" / "read-display.js",
                           "--port", "sim://187", "--count", "3"])

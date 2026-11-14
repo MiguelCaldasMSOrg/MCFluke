@@ -102,6 +102,10 @@ python python\examples\read_display.py --port COM3 --count 3
 node javascript\examples\read-display.js --port COM3 --count 3
 ```
 
+The Python checkout example locates its source package itself; it does not
+require installation or a `PYTHONPATH` setting. Its standalone launch is checked
+with Python's isolated mode, which ignores `PYTHONPATH`.
+
 Replace `COM3` with the actual port. Linux usually uses `/dev/ttyUSB0`; macOS
 usually uses a `/dev/cu.*` device. Change the physical selector yourself when
 the desired function requires moving the rotary switch.
