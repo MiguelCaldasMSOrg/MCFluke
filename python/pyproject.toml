@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcfluke"
+version = "0.1.0"
+description = "Standard-library ctypes bindings for the MCFluke plain-C ABI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+mcfluke-read = "mcfluke.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

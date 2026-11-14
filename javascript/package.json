@@ -1,0 +1,15 @@
+{
+  "name": "mcfluke",
+  "version": "0.1.0",
+  "description": "Dependency-free persistent native-host bindings for MCFluke",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": "./src/index.js",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "test": "node --test",
+    "test:unit": "node --test test/transport.test.js",
+    "example": "node examples/read-display.js"
+  },
+  "dependencies": {}
+}

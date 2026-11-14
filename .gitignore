@@ -1,0 +1,14 @@
+/build/
+/out/
+**/bin/
+**/obj/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+node_modules/
+.vs/
+.idea/
+*.user
+*.log
+.DS_Store
