@@ -9,17 +9,19 @@ internal static class ClockSynchronizationTests
     {
         yield return ("clock latency statistics and bounded scheduling", Statistics);
         yield return ("clock synchronization compensates RMW, wire delay and divider phase", Synchronizes);
+        yield return ("clock synchronization stops after one satisfactory write", StopsAfterFirstGoodWrite);
         yield return ("clock synchronization allows a deferred firmware latch after ACK", DeferredLatch);
         yield return ("clock synchronization handles midnight and non-UTC local time", Midnight);
         yield return ("clock synchronization rejects a frozen counter before any write", FrozenCounter);
         yield return ("clock synchronization aborts on a PC clock step before writing", ClockStep);
         yield return ("clock synchronization aborts on a PC time-zone change before writing", ZoneChange);
-        yield return ("clock synchronization skips a late minute without writing", LateBoundary);
+        yield return ("clock synchronization skips a late decisecond boundary without writing", LateBoundary);
         yield return ("clock synchronization never retries an ambiguous write", AmbiguousWrite);
         yield return ("clock synchronization rejects inconsistent post-write readback", InvalidReadback);
         yield return ("clock synchronization stops after four nonconvergent writes", Nonconvergent);
         yield return ("clock synchronization honors cancellation before I/O", Cancelled);
-        yield return ("clock synchronization cancels during a minute wait without writing", CancelledWhileWaiting);
+        yield return ("clock synchronization cancels during a boundary wait without writing", CancelledWhileWaiting);
+        yield return ("clock synchronization enforces its short total time budget", TimeBudget);
         yield return ("clock synchronization cancellation does not pretend to undo an acknowledged write", CancelledAfterWrite);
         yield return ("clock readback offset arithmetic handles uint32 counter rollover", CounterRollover);
     }
@@ -40,8 +42,10 @@ internal static class ClockSynchronizationTests
         Throws<ArgumentException>(() => CommandLatency.From([TimeSpan.Zero]));
         var clock = new FakeTime(Origin);
         ClockCommitPlan plan = ClockTiming.Plan(clock, TimeSpan.FromMilliseconds(-40));
-        Equal(0L, plan.TargetUtc.Ticks % TimeSpan.TicksPerMinute);
-        Require(plan.SendAt > plan.TargetUtc - Origin, "A negative lead should launch after the minute boundary.");
+        Equal(0L, plan.TargetUtc.Ticks % TimeSpan.FromMilliseconds(100).Ticks);
+        Require(plan.TargetUtc - Origin <= TimeSpan.FromMilliseconds(150),
+            "A feasible decisecond target must not wait for a whole second or minute.");
+        Require(plan.SendAt > plan.TargetUtc - Origin, "A negative lead should launch after the target boundary.");
         Throws<ClockSyncException>(() => ClockTiming.Plan(clock, TimeSpan.FromSeconds(11)));
     }
 
@@ -58,21 +62,22 @@ internal static class ClockSynchronizationTests
             };
             var messages = new List<string>();
             ClockSyncResult result = Run(meter, clock, messages.Add);
-            Equal(3, result.Writes);
-            Equal(3, meter.SetCalls);
+            Equal(2, result.Writes);
+            Equal(2, meter.SetCalls);
             Require(result.Offset.ContainsZero, "Readbacks should bracket zero offset.");
-            Require(meter.Targets.All(time => time.Second == 0 && time.Ticks % TimeSpan.TicksPerSecond == 0),
-                "All writes must target exact minutes.");
-            Require(clock.Elapsed >= TimeSpan.FromMinutes(2) && clock.Elapsed < TimeSpan.FromMinutes(4),
-                "Virtual minute waits were not exercised.");
+            Require(meter.Targets.All(time => time.Ticks % TimeSpan.FromMilliseconds(100).Ticks == 0),
+                "All writes must target exact deciseconds.");
+            Require(meter.Targets.Any(time => time.Millisecond != 0),
+                "Targets should use the available decisecond resolution.");
+            Require(clock.Elapsed < TimeSpan.FromSeconds(10), "Normal synchronization should finish within seconds.");
             Require(messages.Any(message => message.Contains("setter launch lead", StringComparison.Ordinal)),
                 "Missing latency-compensation diagnostics.");
-            Require(meter.SetterLaunches.Distinct().Count() == 3, "Expected separate minute-boundary writes.");
+            Require(meter.SetterLaunches.Distinct().Count() == 2, "Expected only the required correction.");
             if (scenario.Outbound == 35)
             {
                 var target = new DateTimeOffset(Origin.Date + meter.Targets[^1].ToTimeSpan(), TimeSpan.Zero);
                 Require(meter.SetterLaunches[^1] > target - Origin,
-                    "Divider-phase compensation should be able to launch after a minute boundary.");
+                    "Divider-phase compensation should be able to launch after the target boundary.");
             }
         }
     }
@@ -80,13 +85,11 @@ internal static class ClockSynchronizationTests
     private static void Midnight()
     {
         TimeZoneInfo zone = TimeZoneInfo.CreateCustomTimeZone("test +05:30", TimeSpan.FromMinutes(330), "test", "test");
-        var clock = new FakeTime(new DateTimeOffset(2026, 11, 14, 18, 29, 50, TimeSpan.Zero), zone);
+        var clock = new FakeTime(new DateTimeOffset(2026, 11, 14, 18, 29, 57, 800, TimeSpan.Zero), zone);
         var meter = new FakeMeter(clock);
         ClockSyncResult result = Run(meter, clock, _ => { });
-        Equal(3, result.Writes);
-        Equal(new TimeOnly(0, 0), meter.Targets[0]);
-        Equal(new TimeOnly(0, 1), meter.Targets[1]);
-        Equal(new TimeOnly(0, 2), meter.Targets[2]);
+        Equal(1, result.Writes);
+        Equal(new TimeOnly(0, 0, 0, 100), meter.Targets[0]);
     }
 
     private static void DeferredLatch()
@@ -94,7 +97,7 @@ internal static class ClockSynchronizationTests
         var clock = new FakeTime(Origin);
         var meter = new FakeMeter(clock) { DeferredApply = TimeSpan.FromMilliseconds(50) };
         ClockSyncResult result = Run(meter, clock, _ => { });
-        Equal(3, result.Writes);
+        Equal(2, result.Writes);
         Require(result.Offset.ContainsZero, "Deferred clock application was not compensated.");
     }
 
@@ -108,7 +111,7 @@ internal static class ClockSynchronizationTests
 
     private static void ClockStep()
     {
-        var clock = new FakeTime(Origin) { StepAt = TimeSpan.FromSeconds(20) };
+        var clock = new FakeTime(Origin) { StepAt = TimeSpan.FromMilliseconds(2200) };
         var meter = new FakeMeter(clock);
         Throws<ClockSyncException>(() => Run(meter, clock, _ => { }));
         Equal(0, meter.SetCalls);
@@ -120,15 +123,16 @@ internal static class ClockSynchronizationTests
         var meter = new FakeMeter(clock);
         var messages = new List<string>();
         ClockSyncResult result = Run(meter, clock, messages.Add);
-        Equal(3, result.Writes);
-        Equal(new TimeOnly(17, 50), meter.Targets[0]);
+        Equal(1, result.Writes);
+        Require(meter.Targets[0] > new TimeOnly(17, 48, 12, 400), "The missed target must not be written late.");
+        Require(clock.Elapsed < TimeSpan.FromSeconds(6), "A missed boundary must not add a minute of waiting.");
         Require(messages.Any(message => message.Contains("no write sent", StringComparison.Ordinal)),
             "A missed deadline should be reported, not silently used.");
     }
 
     private static void ZoneChange()
     {
-        var clock = new FakeTime(Origin) { ZoneChangeAt = TimeSpan.FromSeconds(20) };
+        var clock = new FakeTime(Origin) { ZoneChangeAt = TimeSpan.FromMilliseconds(2200) };
         var meter = new FakeMeter(clock);
         Throws<ClockSyncException>(() => Run(meter, clock, _ => { }));
         Equal(0, meter.SetCalls);
@@ -182,7 +186,7 @@ internal static class ClockSynchronizationTests
     private static void CancelledWhileWaiting()
     {
         using var cancellation = new CancellationTokenSource();
-        var clock = new FakeTime(Origin) { CancelAt = TimeSpan.FromSeconds(20), Cancellation = cancellation };
+        var clock = new FakeTime(Origin) { CancelAt = TimeSpan.FromMilliseconds(2200), Cancellation = cancellation };
         var meter = new FakeMeter(clock);
         Throws<OperationCanceledException>(() => ClockSynchronization.RunAsync(meter, clock, _ => { },
             cancellation.Token).GetAwaiter().GetResult());
@@ -192,7 +196,7 @@ internal static class ClockSynchronizationTests
     private static void CancelledAfterWrite()
     {
         using var cancellation = new CancellationTokenSource();
-        var clock = new FakeTime(Origin) { CancelAt = TimeSpan.FromSeconds(55), Cancellation = cancellation };
+        var clock = new FakeTime(Origin) { CancelAt = TimeSpan.FromMilliseconds(2600), Cancellation = cancellation };
         var meter = new FakeMeter(clock);
         var messages = new List<string>();
         Throws<OperationCanceledException>(() => ClockSynchronization.RunAsync(meter, clock, messages.Add,
@@ -205,6 +209,25 @@ internal static class ClockSynchronizationTests
     private static ClockSyncResult Run(FakeMeter meter, FakeTime clock, Action<string> log)
         => ClockSynchronization.RunAsync(meter, clock, log, CancellationToken.None).GetAwaiter().GetResult();
 
+    private static void StopsAfterFirstGoodWrite()
+    {
+        var clock = new FakeTime(Origin);
+        var meter = new FakeMeter(clock);
+        ClockSyncResult result = Run(meter, clock, _ => { });
+        Equal(1, result.Writes);
+        Equal(1, meter.SetCalls);
+        Require(clock.Elapsed < TimeSpan.FromSeconds(5), "A satisfactory first write should stop immediately after verification.");
+    }
+
+    private static void TimeBudget()
+    {
+        var clock = new FakeTime(Origin) { DelayOverhead = TimeSpan.FromSeconds(5) };
+        var meter = new FakeMeter(clock);
+        Throws<ClockSyncException>(() => Run(meter, clock, _ => { }));
+        Equal(0, meter.SetCalls);
+        Require(clock.Elapsed < TimeSpan.FromSeconds(36), "The time budget must be checked during initial sampling.");
+    }
+
     private sealed class FakeTime(DateTimeOffset origin, TimeZoneInfo? zone = null) : IClockSyncTime
     {
         public TimeSpan Elapsed { get; private set; }
@@ -215,6 +238,7 @@ internal static class ClockSynchronizationTests
         public TimeSpan? StepAt { get; init; }
         public TimeSpan? ZoneChangeAt { get; init; }
         public TimeSpan OversleepOnce { get; set; }
+        public TimeSpan DelayOverhead { get; init; }
         public TimeSpan? CancelAt { get; init; }
         public CancellationTokenSource? Cancellation { get; init; }
         public DateTimeOffset UtcNow => origin + Elapsed +
@@ -229,7 +253,7 @@ internal static class ClockSynchronizationTests
         public Task DelayAsync(TimeSpan delay, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
-            Advance(delay);
+            Advance(delay + DelayOverhead);
             if (delay <= TimeSpan.FromMilliseconds(30) && OversleepOnce > TimeSpan.Zero)
             {
                 Advance(OversleepOnce);
@@ -282,7 +306,7 @@ internal static class ClockSynchronizationTests
             SetterLaunches.Add(clock.Elapsed);
             if (FailSet) throw new FlukeProtocolException(0, "test write", "Injected ambiguous write failure.");
             clock.Advance(TimeSpan.FromMilliseconds(40));
-            clock.Advance(VaryOutbound && SetCalls % 2 == 0 ? TimeSpan.FromMilliseconds(600) : Outbound);
+            clock.Advance(VaryOutbound && SetCalls % 2 == 1 ? TimeSpan.FromMilliseconds(600) : Outbound);
             uint written = (uint)(target.Ticks / TimeSpan.FromMilliseconds(100).Ticks);
             if (DeferredApply > TimeSpan.Zero)
             {

@@ -2,8 +2,9 @@
 
 Select **13** in the C# exerciser and type **SYNC**. Keep the optical head fixed,
 leave the meter awake, and do not operate its buttons or change settings during
-the operation. Normal execution spans three minute boundaries; a fourth write
-is used if the measured residual offset still excludes zero.
+the operation. Normal execution takes seconds. It targets the next feasible
+0.1-second boundary and stops as soon as readback is satisfactory; up to four
+writes are allowed only when further correction is needed.
 
 The target is the **PC's local time**, including its time-zone offset at the
 target instant. No date is programmed. The ordinary reading timestamps printed
@@ -56,8 +57,10 @@ includes the preliminary **QS read**, not just the final PS transmission.
 2. Estimate the first setter launch lead from measured QS turnaround plus a
    wire-length-aware PS estimate. At 9600 8N1, QS has 3 outgoing and 34 incoming
    bytes; PS has 33 outgoing and 2 acknowledgement bytes.
-3. Choose a future PC minute with preparation margin. Convert that absolute
-   instant to local time and use a **monotonic** deadline for scheduling.
+3. Choose the next feasible PC **0.1-second boundary**, allowing for the
+   expected setter latency and a 50 ms launch margin. There is no minute wait.
+   Convert that absolute instant to local time and use a **monotonic**
+   deadline for scheduling.
    The last at-most-30 ms uses a bounded spin wait rather than relying on a
    coarse sleep; the system-wide timer resolution is not changed.
 4. Start the entire read-modify-write early enough to compensate its expected
@@ -67,16 +70,17 @@ includes the preliminary **QS read**, not just the final PS transmission.
    readbacks. Derive a consistent
    meter-minus-PC offset interval, accounting for 100 ms counter quantization
    and each request/response timing bracket.
-6. If zero lies outside that interval, adjust the next minute's launch lead by
+6. If zero lies outside that interval, adjust the next attempt's launch lead by
    subtracting its midpoint. This empirically compensates the whole operation,
    including firmware processing and retained clock-divider phase, rather than
    merely assuming half a round trip.
-7. Perform at least three writes for repeat confirmation. Allow a fourth when
-   needed; otherwise report nonconvergence instead of claiming synchronization.
+7. Stop immediately when the interval includes zero. There is no minimum write
+   count and no mandatory repeated setting. Allow at most four writes before
+   reporting nonconvergence instead of claiming synchronization.
 
 A positive offset means the meter is ahead of the PC. A negative launch lead
 is allowed: retaining the meter's internal divider phase can require starting
-slightly after a PC minute transition.
+slightly after a PC decisecond boundary.
 
 ## Accuracy and failure reporting
 
@@ -92,14 +96,17 @@ turn Windows/Linux/macOS or USB serial into a real-time system.
 
 Significant PC clock/time-zone changes, frozen or malformed counter data,
 inconsistent readbacks, lost acknowledgements and excessive scheduling
-delays stop the operation explicitly. Scheduling is bounded to five minutes.
+delays stop the operation explicitly. A 30-second budget is checked throughout
+sampling, scheduling and verification. An in-flight native operation still
+obeys its configured I/O timeout and cannot be interrupted by this budget.
 Ctrl+C stops future writes after any in-flight native operation finishes.
 Already acknowledged clock changes are **not undone** on cancellation or
 failure.
 
 ## Testing and compatibility
 
-The virtual-clock tests exercise whole minute waits instantly, including
+The virtual-clock tests enforce decisecond targets and completion in seconds,
+including first-write success without unnecessary repeats, and cover
 latency compensation, divider phase, midnight, non-UTC zones, clock steps,
 late deadlines, nonconvergence, counter rollover and cancellation. Native
 tests verify binary framing, fresh read-modify-write, non-clock byte

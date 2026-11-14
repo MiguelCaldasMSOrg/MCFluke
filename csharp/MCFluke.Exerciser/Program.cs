@@ -83,7 +83,7 @@ internal static class ExerciserApp
                 7  Get timeout              8  Set timeout
                 9  Parse an ID payload     10  Parse a full QM display line
                11  Version and ABI        12  Status messages
-               13  Synchronize Fluke clock (about 3-4 minutes)
+               13  Synchronize Fluke clock (normally seconds)
                 h  Help                    q  Quit
                """);
             string? choice = await ReadLineAsync("Choice: ", token);
@@ -154,7 +154,7 @@ internal static class ExerciserApp
                         break;
                     case "13":
                         Console.WriteLine("Experimental 18x QS/PS clock synchronization; other settings are preserved by read-modify-write.");
-                        Console.WriteLine("It performs three timed minute-boundary writes, or a fourth if needed, and checks clock readback.");
+                        Console.WriteLine("It targets the next feasible 0.1-second boundary, verifies readback, and corrects again only if needed (at most four writes).");
                         Console.WriteLine("Keep the meter awake and optical head fixed; do not change settings or press meter buttons during synchronization.");
                         Console.WriteLine("Subsecond results are measured estimates: the exact firmware latch/divider behavior is not manufacturer-specified.");
                         if (await ConfirmAsync("Type SYNC to synchronize to the PC's local clock: ", "SYNC", token))
@@ -331,8 +331,9 @@ internal static class ExerciserApp
         Numeric values and units match the display exactly; no SI conversion.
         Reading timestamps use the PC's local clock (HH:mm:ss), not the meter's clock.
         Menu 13 synchronizes the meter clock through extended QS/PS commands after typed SYNC.
-        It measures latency, compensates timed minute-boundary writes, and verifies counter readback.
-        Clock synchronization usually takes 3-4 minutes. Keep the optical link stable and do not operate the meter.
+        It measures latency, compensates 0.1-second-boundary writes, and stops when readback is satisfactory.
+        Clock synchronization normally takes seconds, with a 30-second budget (in-flight native calls retain their timeout).
+        Keep the optical link stable and do not operate the meter.
         Ctrl+C exits (130); EOF exits without sending the pending command.
         Exit codes: 0 success, 1 operation/test/native-load failure, 2 invalid CLI input.
         """);

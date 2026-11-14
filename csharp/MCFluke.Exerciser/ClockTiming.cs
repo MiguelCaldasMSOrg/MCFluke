@@ -60,14 +60,17 @@ internal sealed class ClockSyncException(string message, Exception? inner = null
 
 internal static class ClockTiming
 {
+    internal static readonly TimeSpan CounterTick = TimeSpan.FromMilliseconds(100);
+
     internal static ClockCommitPlan Plan(IClockSyncTime clock, TimeSpan sendLead)
     {
         if (sendLead < TimeSpan.FromSeconds(-10) || sendLead > TimeSpan.FromSeconds(10))
-            throw new ClockSyncException("Measured clock-setting latency is too large for safe minute-boundary scheduling.");
+            throw new ClockSyncException("Measured clock-setting latency is too large for safe counter-boundary scheduling.");
         DateTimeOffset reference = clock.UtcNow.ToUniversalTime();
         TimeSpan referenceElapsed = clock.Elapsed;
-        DateTimeOffset earliest = reference + (sendLead > TimeSpan.Zero ? sendLead : TimeSpan.Zero) + TimeSpan.FromSeconds(5);
-        DateTimeOffset target = earliest.AddTicks(-(earliest.Ticks % TimeSpan.TicksPerMinute)).AddMinutes(1);
+        DateTimeOffset earliest = reference + (sendLead > TimeSpan.Zero ? sendLead : TimeSpan.Zero) + TimeSpan.FromMilliseconds(50);
+        long remainder = earliest.Ticks % CounterTick.Ticks;
+        DateTimeOffset target = remainder == 0 ? earliest : earliest.AddTicks(CounterTick.Ticks - remainder);
         DateTimeOffset local = TimeZoneInfo.ConvertTime(target, clock.LocalZone);
         return new(target, TimeOnly.FromDateTime(local.DateTime),
             referenceElapsed + (target - reference) - sendLead,
@@ -77,7 +80,7 @@ internal static class ClockTiming
     internal static void CheckClock(IClockSyncTime clock, ClockCommitPlan plan)
     {
         DateTimeOffset expected = plan.ReferenceUtc + (clock.Elapsed - plan.ReferenceElapsed);
-        if ((clock.UtcNow - expected).Duration() > TimeSpan.FromMilliseconds(250))
+        if ((clock.UtcNow - expected).Duration() > TimeSpan.FromMilliseconds(50))
             throw new ClockSyncException("The PC clock changed; synchronization stopped. Any earlier acknowledged clock write is not undone.");
         if (TimeZoneInfo.ConvertTime(plan.TargetUtc, clock.LocalZone).Offset != plan.LocalOffset)
             throw new ClockSyncException("The PC time zone changed; synchronization stopped. Any earlier acknowledged clock write is not undone.");

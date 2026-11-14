@@ -66,9 +66,11 @@ concise invariant formatting rather than forced 17-digit output; `Display`
 still preserves every character sent by the meter, including trailing zeros.
 
 Menu **13** offers clock synchronization after typed **SYNC**. It measures
-command round trips, schedules three minute-boundary settings (a fourth if
-needed), and corrects launch timing using decisecond clock readbacks. Allow
-about 3-4 minutes with the optical head fixed. This is an experimental
+command round trips, targets the next feasible 0.1-second boundary, and
+corrects launch timing using decisecond clock readbacks. It stops after the
+first satisfactory result and makes at most four writes only if needed.
+It normally takes seconds, not minutes; a 30-second budget is checked between
+I/O calls, which retain their configured timeout. This is an experimental
 community-evidenced QS/PS feature, not a manufacturer-certified timing
 operation; [details and uncertainty](../docs/clock-sync.md) are documented.
 
@@ -130,7 +132,7 @@ Cdecl with bounded fixed-byte structures matching the C header.
 `SetClock(TimeOnly)` accepts exact 0.1-second increments, reads fresh settings
 and changes only the clock field, preserving the nearest counter day. It
 returns the raw counter written. This immediate setter is distinct from
-menu 13's measured, minute-boundary workflow. Its QS read and PS write share
+menu 13's measured, decisecond-boundary workflow. Its QS read and PS write share
 one native operation timeout. Existing methods/signatures are unchanged.
 
 Failures are typed `FlukeException` subclasses for all ten native error statuses

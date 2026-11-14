@@ -126,9 +126,10 @@ confirmation and warning; it is not an automatic calibration procedure.
 Neither is performed automatically on real hardware.
 
 Menu **13** synchronizes the Fluke clock to the PC's local time after typed
-**SYNC** confirmation. It measures turnaround, compensates minute-boundary
-settings, reads the clock back, and refines the timing over three or four
-minute transitions. Other settings are preserved. This uses experimental
+**SYNC** confirmation. It measures turnaround, targets the next feasible
+0.1-second boundary, reads the clock back, and corrects again only if needed.
+It normally finishes in seconds, without minute waits or mandatory repeated
+writes. Other settings are preserved. This uses experimental
 18x `QS` / `PS` commands; see [clock synchronization](docs/clock-sync.md) for
 protocol evidence, timing assumptions and accuracy limits.
 

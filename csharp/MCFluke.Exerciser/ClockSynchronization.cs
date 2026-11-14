@@ -34,9 +34,9 @@ internal static class ClockSynchronization
 {
     private const int InitialSamples = 12;
     private const int VerificationSamples = 24;
-    private const int RequiredWrites = 3;
     private const int MaximumWrites = 4;
-    private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(100);
+    private static readonly TimeSpan Tick = ClockTiming.CounterTick;
+    private static readonly TimeSpan MaximumDuration = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ReadRequestWire = TimeSpan.FromSeconds(3 * 10d / 9600);
     private static readonly TimeSpan ReadResponseWire = TimeSpan.FromSeconds(34 * 10d / 9600);
     private static readonly TimeSpan SetRequestWire = TimeSpan.FromSeconds(33 * 10d / 9600);
@@ -58,12 +58,12 @@ internal static class ClockSynchronization
     private static async Task<ClockSyncResult> RunCoreAsync(IClockSyncMeter meter, IClockSyncTime clock,
         Action<string> log, CancellationToken token)
     {
-        TimeSpan began = clock.Elapsed;
+        TimeSpan deadline = clock.Elapsed + MaximumDuration;
         var readSamples = new List<TimeSpan>();
         var setSamples = new List<TimeSpan>();
         log("Reading the running clock and measuring QS turnaround; no writes yet.");
         List<ClockObservation> initial = await ReadSamplesAsync(meter, clock, InitialSamples,
-            TimeSpan.FromMilliseconds(150), null, token);
+            TimeSpan.FromMilliseconds(150), null, deadline, token);
         ValidateProgress(initial);
         log(FormattableString.Invariant(
             $"Last read: Fluke {ClockTime(initial[^1].Counter):HH:mm:ss.f}; PC after reply {TimeZoneInfo.ConvertTime(initial[^1].FinishedUtc, clock.LocalZone):HH:mm:ss.fff}."));
@@ -79,18 +79,20 @@ internal static class ClockSynchronization
         for (int pass = 1; pass <= MaximumWrites; pass++)
         {
             token.ThrowIfCancellationRequested();
+            CheckBudget(clock, deadline);
             ClockCommitPlan plan = ClockTiming.Plan(clock, lead);
-            if (plan.SendAt - began > TimeSpan.FromMinutes(5))
-                throw new ClockSyncException("Synchronization exceeded the five-minute scheduling budget.");
+            if (plan.SendAt >= deadline)
+                throw new ClockSyncException("No feasible clock-setting boundary remains within the 30-second budget.");
             log(FormattableString.Invariant(
-                $"Pass {pass}: target local {plan.TargetLocal:HH:mm}:00; setter launch lead {lead.TotalMilliseconds:F1} ms. Keep the optical head steady."));
+                $"Pass {pass}: target local {plan.TargetLocal:HH:mm:ss.f}; setter launch lead {lead.TotalMilliseconds:F1} ms. Keep the optical head steady."));
             await ClockTiming.WaitForSendAsync(clock, plan, token);
             ClockTiming.CheckClock(clock, plan);
+            CheckBudget(clock, deadline);
             if (clock.Elapsed - plan.SendAt > TimeSpan.FromMilliseconds(50))
             {
                 log("The PC missed this launch deadline by more than 50 ms; no write sent for this boundary.");
                 if (++missedBoundaries > 2)
-                    throw new ClockSyncException("Too many missed minute boundaries; synchronization aborted.");
+                    throw new ClockSyncException("Too many missed counter boundaries; synchronization aborted.");
                 --pass;
                 continue;
             }
@@ -113,16 +115,17 @@ internal static class ClockSynchronization
             log(FormattableString.Invariant(
                 $"PS acknowledged; complete QS+PS call took {(finished - started).TotalMilliseconds:F1} ms. Reading the clock back."));
             ClockTiming.CheckClock(clock, plan);
+            CheckBudget(clock, deadline);
             await clock.DelayAsync(Tick, token);
             List<ClockObservation> samples = await ReadSamplesAsync(meter, clock, VerificationSamples,
-                TimeSpan.FromMilliseconds(25), plan, token);
+                TimeSpan.FromMilliseconds(25), plan, deadline, token);
             readSamples.AddRange(samples.Select(sample => sample.Turnaround));
             offset = EstimateOffset(samples, written, plan.TargetUtc);
             log(FormattableString.Invariant(
                 $"Last read: Fluke {ClockTime(samples[^1].Counter):HH:mm:ss.f}; PC after reply {TimeZoneInfo.ConvertTime(samples[^1].FinishedUtc, clock.LocalZone):HH:mm:ss.fff}."));
             log(FormattableString.Invariant(
                 $"Observed meter-minus-PC offset envelope: {offset.Lower.TotalMilliseconds:+0.0;-0.0;0.0} .. {offset.Upper.TotalMilliseconds:+0.0;-0.0;0.0} ms."));
-            if (pass >= RequiredWrites && offset.ContainsZero)
+            if (offset.ContainsZero)
             {
                 var result = new ClockSyncResult(pass, offset,
                     CommandLatency.From(readSamples), CommandLatency.From(setSamples));
@@ -131,32 +134,40 @@ internal static class ClockSynchronization
                 log("Clock readback is consistent with the PC within the reported envelope. This is measured best effort, not a real-time guarantee.");
                 return result;
             }
-            if (!offset.ContainsZero)
-                lead -= offset.Midpoint;
+            lead -= offset.Midpoint;
         }
         throw new ClockSyncException(FormattableString.Invariant(
             $"Four clock writes completed, but residual offset remains {offset.Lower.TotalMilliseconds:F1} .. {offset.Upper.TotalMilliseconds:F1} ms. No perfect synchronization is claimed."));
     }
 
     private static async Task<List<ClockObservation>> ReadSamplesAsync(IClockSyncMeter meter,
-        IClockSyncTime clock, int count, TimeSpan spacing, ClockCommitPlan? plan, CancellationToken token)
+        IClockSyncTime clock, int count, TimeSpan spacing, ClockCommitPlan? plan,
+        TimeSpan deadline, CancellationToken token)
     {
         var samples = new List<ClockObservation>(count);
         for (int index = 0; index < count; index++)
         {
             token.ThrowIfCancellationRequested();
+            CheckBudget(clock, deadline);
             if (plan is not null) ClockTiming.CheckClock(clock, plan);
             TimeSpan started = clock.Elapsed;
             DateTimeOffset utc = clock.UtcNow.ToUniversalTime();
             uint counter = meter.ReadCounter();
             TimeSpan finished = clock.Elapsed;
             DateTimeOffset utcEnd = clock.UtcNow.ToUniversalTime();
+            CheckBudget(clock, deadline);
             if (((utcEnd - utc) - (finished - started)).Duration() > TimeSpan.FromMilliseconds(50))
                 throw new ClockSyncException("The PC clock changed during a clock read.");
             samples.Add(new(counter, utc, utcEnd, started, finished));
             if (index + 1 < count) await clock.DelayAsync(spacing, token);
         }
         return samples;
+    }
+
+    private static void CheckBudget(IClockSyncTime clock, TimeSpan deadline)
+    {
+        if (clock.Elapsed >= deadline)
+            throw new ClockSyncException("The 30-second synchronization budget expired; any earlier acknowledged clock write is not undone.");
     }
 
     internal static void ValidateProgress(IReadOnlyList<ClockObservation> samples)
