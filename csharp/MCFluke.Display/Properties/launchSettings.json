@@ -1,0 +1,19 @@
+{
+  "profiles": {
+    "Fluke 187 - COM3": {
+      "commandName": "Project",
+      "commandLineArgs": "--port COM3",
+      "nativeDebugging": true
+    },
+    "Simulator": {
+      "commandName": "Project",
+      "commandLineArgs": "--port sim://187",
+      "nativeDebugging": true
+    },
+    "Offline self-tests": {
+      "commandName": "Project",
+      "commandLineArgs": "--self-test",
+      "nativeDebugging": true
+    }
+  }
+}

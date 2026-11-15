@@ -1,0 +1,40 @@
+<Project>
+  <PropertyGroup>
+    <BaseOutputPath>$(MSBuildProjectDirectory)\..\out\vs\bin\MCFluke.JavaScript\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildProjectDirectory)\..\out\vs\obj\MCFluke.JavaScript\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <Import Project="Sdk.props" Sdk="Microsoft.VisualStudio.JavaScript.Sdk" Version="1.0.6537497" />
+  <Import Project="..\eng\MCFluke.Paths.props" />
+  <PropertyGroup>
+    <ProjectGuid>{472A6B12-8A6E-4AAD-B0FD-5194075C9024}</ProjectGuid>
+    <BuildOutputFolder>$(BaseOutputPath)$(Configuration)\</BuildOutputFolder>
+    <IntermediateOutputPath>$(BaseIntermediateOutputPath)$(Configuration)\</IntermediateOutputPath>
+    <ShouldRunNpmInstall>false</ShouldRunNpmInstall>
+    <ShouldRunBuildScript>false</ShouldRunBuildScript>
+    <StartupCommand>set "MCFLUKE_HOST=$(MCFlukeNativeBin)mcfluke-host.exe"&amp;&amp; npm run example -- --port COM3</StartupCommand>
+    <TestCommand>set "MCFLUKE_HOST=$(MCFlukeNativeBin)mcfluke-host.exe"&amp;&amp; npm test</TestCommand>
+    <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\native\MCFluke.Bridge.vcxproj">
+      <Project>{D4ECBA9A-5202-493F-8A55-F362E327F842}</Project>
+      <Name>MCFluke.Bridge</Name>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <SkipGetTargetFrameworkProperties>true</SkipGetTargetFrameworkProperties>
+      <Private>false</Private>
+      <SetConfiguration>Configuration=$(Configuration)</SetConfiguration>
+      <SetPlatform>Platform=$(MCFlukeNativePlatform)</SetPlatform>
+      <AdditionalProperties>Platform=$(MCFlukeNativePlatform)</AdditionalProperties>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="Sdk.targets" Sdk="Microsoft.VisualStudio.JavaScript.Sdk" Version="1.0.6537497" />
+  <Target Name="MCFlukeWriteLaunchEnvironment" AfterTargets="Build">
+    <Error Condition="!Exists('$(MCFlukeNativeBin)mcfluke-host.exe')"
+           Text="Build MCFluke.Bridge for $(Configuration)|$(MCFlukeNativePlatform) before launching JavaScript." />
+    <MakeDir Directories="$(BaseIntermediateOutputPath)" />
+    <!-- The task's default UTF-8 encoding omits the BOM that Node's env-file parser rejects. -->
+    <WriteLinesToFile File="$(BaseIntermediateOutputPath)launch.env"
+                      Lines="MCFLUKE_HOST=$(MCFlukeNativeBin)mcfluke-host.exe"
+                      Overwrite="true" />
+  </Target>
+</Project>

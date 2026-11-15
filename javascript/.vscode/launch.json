@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Fluke 187 - COM3",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}\\examples\\read-display.js",
+      "cwd": "${workspaceFolder}",
+      "args": ["--port", "COM3"],
+      "envFile": "${workspaceFolder}\\..\\out\\vs\\obj\\MCFluke.JavaScript\\launch.env",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Simulator",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}\\examples\\read-display.js",
+      "cwd": "${workspaceFolder}",
+      "args": ["--port", "sim://187", "--count", "3"],
+      "envFile": "${workspaceFolder}\\..\\out\\vs\\obj\\MCFluke.JavaScript\\launch.env",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

@@ -23,6 +23,10 @@ The C# profiles are **Fluke 187 - COM3**, **Simulator**, **Offline self-tests**
 and **COM3 - 5 read-only samples**. The first is interactive. The offline
 profiles never open a hardware port.
 
+For a display-only Windows Forms window, set **MCFluke.Display** as the startup
+project. Its COM3, Simulator and Offline self-tests profiles are documented in
+[the display project README](csharp/MCFluke.Display/README.md).
+
 To run another language, set **MCFluke.C.Example**, **MCFluke.Python**, or
 **MCFluke.JavaScript** as the startup project and press F5. The native
 dependencies build first, and native-library/helper paths are supplied
@@ -43,8 +47,9 @@ Python, JavaScript and C# checks, including example cadence checks.
 | MCFluke.NativeTests | Native protocol/transcript test console |
 | MCFluke (Managed folder) | .NET 10 binding library (`MCFluke.Managed.dll`) |
 | MCFluke.Exerciser | Full C# console exerciser |
+| MCFluke.Display | Read-only C# Windows Forms measurement window |
 | MCFluke.Python | Python package, example and unit tests |
-| MCFluke.JavaScript | Node.js package, example and tests |
+| MCFluke.JavaScript | JSPS (`.esproj`) Node.js package, example and tests |
 | MCFluke.OfflineChecks | IDE-launchable complete offline check runner |
 
 The `.vcxproj` files are Visual Studio's native project format, but the
@@ -52,7 +57,7 @@ compiler is explicitly set to **C**, with **C11** enabled. No C++ rewrite or
 wrapper is involved. All bindings share this same native implementation;
 there is no sigrok/PulseView dependency.
 
-Both C# projects target **`net10.0-windows`**. Their native project dependency
+All C# projects target **`net10.0-windows`**. Their native project dependency
 is mandatory, not an optional or managed-only build path.
 
 ## Visual Studio requirements

@@ -14,24 +14,34 @@ F5. No separate native-build command, npm installation or environment editing
 is needed. Visual Studio selects the installed/global Node.js runtime; no
 machine-specific `NodeExePath` is stored in the project.
 
-`MCFluke.JavaScript.njsproj` starts `examples\read-display.js` with
-`ScriptArguments=--port COM3`, working directory `javascript`, and browser launch
-disabled. The Debug/Release language configurations use Any CPU, mapped from
-the solution's Debug|x64 and Release|x64 configurations; the native
-project reference builds `MCFluke.Bridge` for x64 (and its native-core dependency).
-Required imports are `..\eng\MCFluke.Paths.props` and the installed VS18
-`Node.js Tools\Microsoft.NodejsToolsV2.targets`, with no silent missing-tool
-fallback. The shared props select `out\vs\bin\x64\$(Configuration)\`.
-The project `Environment` supplies `MCFLUKE_HOST` as that configuration's exact
-`mcfluke-host.exe` path.
+`MCFluke.JavaScript.esproj` uses Visual Studio's modern JavaScript Project
+System (JSPS), with `Microsoft.VisualStudio.JavaScript.Sdk` pinned to the
+version shipped with Visual Studio 2026. Visual Studio resolves the SDK;
+the retired Node.js Tools project targets are no longer used.
+The Debug/Release language configurations use Any CPU, mapped from the
+solution's Debug|x64 and Release|x64 configurations. The native project
+reference builds `MCFluke.Bridge` for x64 and its native-core dependency.
+The shared `..\eng\MCFluke.Paths.props` selects
+`out\vs\bin\x64\$(Configuration)\`.
+
+The checked-in `.vscode\launch.json` supplies Node debugger profiles, not a
+browser. **Fluke 187 - COM3** starts `examples\read-display.js` with
+`--port COM3` and working directory `javascript`. Every project build writes
+the exact configuration's `MCFLUKE_HOST` into
+`out\vs\obj\MCFluke.JavaScript\launch.env`, read by both debugger profiles.
+The IDE's fast up-to-date shortcut is disabled for this project so switching
+between existing Debug/Release outputs always refreshes that launch environment;
+native project builds remain incremental.
 Language build outputs are isolated in `out\vs\bin\MCFluke.JavaScript\$(Configuration)\`
 and intermediates in `out\vs\obj\MCFluke.JavaScript\$(Configuration)\`.
-The base intermediate path is set before `Microsoft.Common.props`, keeping
+The base intermediate path is set before the SDK props, keeping
 project extension/cache files under `out\vs` rather than the source directory.
-The exact native-helper launch override is unchanged.
+Automatic npm installation and build scripts are disabled: this package has no
+dependencies and does not need transpilation or a bundler. The existing npm
+scripts and public binding API are unchanged.
 
-F5 uses the real COM3 port by default. For a hardware-free run, change Script
-Arguments in project properties to `--port sim://187 --count 3`.
+F5 uses the real COM3 port by default. For a bounded hardware-free run, select
+the **Simulator** debugger profile (`--port sim://187 --count 3`).
 Both modes only read identity and the primary display.
 Tests continue to use Node's built-in `node:test` via the existing `npm test`
 script; no Mocha/Jest adapter or dependencies are added.
